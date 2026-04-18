@@ -2,10 +2,14 @@ __pycache__/
 *.pyc
 .cache/
 data/
-.git/
 .DS_Store
 .vscode/
 .idea/
 .workbuddy/
-*.md
-!README.md
+
+# 本地配置（不提交到公开仓库）
+config.yaml
+covers.json
+library.json
+start.bat
+start.sh
