@@ -7,7 +7,7 @@
 
 services:
   photo-gallery:
-    image: luojiutian007/photo-gallery:latest
+    image: ghcr.io/dahaitun/photo-gallery:latest
     container_name: photo-gallery
     restart: unless-stopped
     ports:
