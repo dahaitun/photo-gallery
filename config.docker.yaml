@@ -1,0 +1,24 @@
+# 📸 相册配置文件（Docker 部署版）
+# Docker 部署时使用此配置（entrypoint.sh 会自动复制为 config.yaml）
+
+photo_root: "/photos"
+
+# 服务配置
+host: "0.0.0.0"
+port: 8080
+
+# 缩略图配置
+thumbnail_size: 320
+cache_dir: "data/cache"
+
+# 支持的图片格式
+supported_formats:
+  - jpg
+  - jpeg
+  - png
+  - gif
+  - webp
+  - heic
+  - bmp
+  - tiff
+  - tif

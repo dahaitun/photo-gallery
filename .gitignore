@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.cache/
+data/
+.git/
+.DS_Store
+.vscode/
+.idea/
+.workbuddy/
+*.md
+!README.md

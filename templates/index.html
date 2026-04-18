@@ -1,0 +1,3281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📸 私人相册</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #f4f5f9;
+      --bg2:        #ffffff;
+      --bg3:        #f0f1f5;
+      --border:     #e2e4ea;
+      --text:       #1a1d2e;
+      --text2:      #6b7185;
+      --accent:     #5b6ef7;
+      --accent2:    #8b5cf6;
+      --radius:     0px;
+      --cols:       5;
+      --fit-mode:   cover;
+      --card-ratio: 1 / 1;
+      --sidebar-w:  240px;
+      --shadow-sm:  0 1px 3px rgba(0,0,0,.06);
+      --shadow-md:  0 4px 12px rgba(0,0,0,.08);
+      --shadow-lg:  0 12px 32px rgba(0,0,0,.12);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════
+       顶部导航
+    ══════════════════════════════════════ */
+    .navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      height: 52px;
+      background: rgba(255,255,255,.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .navbar-logo {
+      font-size: 16px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    /* 侧边栏开关 */
+    .sidebar-toggle {
+      width: 32px; height: 32px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text2);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .sidebar-toggle:hover { background: var(--border); color: var(--text); }
+    .sidebar-toggle.active { color: var(--accent); border-color: var(--accent); }
+
+    /* 面包屑 */
+    .breadcrumb {
+      display: flex; align-items: center; gap: 4px;
+      flex: 1; overflow: hidden; flex-wrap: wrap; min-width: 0;
+    }
+    .breadcrumb-item {
+      color: var(--text2); cursor: pointer;
+      padding: 3px 6px; border-radius: 6px;
+      transition: all .15s; white-space: nowrap; font-size: 13px;
+    }
+    .breadcrumb-item:hover { background: var(--border); color: var(--text); }
+    .breadcrumb-item.active { color: var(--text); font-weight: 600; }
+    .breadcrumb-sep { color: var(--border); font-size: 16px; }
+
+    /* 导航栏右侧 */
+    .navbar-controls {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .col-slider-group {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; padding: 4px 10px;
+    }
+    .col-slider-label { color: var(--text2); font-size: 12px; white-space: nowrap; }
+    .col-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 90px; height: 4px;
+      background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+    }
+    .col-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); cursor: pointer; transition: transform .15s;
+      box-shadow: 0 1px 4px rgba(91,110,247,.4);
+    }
+    .col-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+    .col-val { color: var(--accent); font-size: 12px; font-weight: 700; min-width: 14px; text-align: center; }
+
+    .settings-btn {
+      width: 32px; height: 32px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 7px; color: var(--text2); cursor: pointer;
+      font-size: 16px; display: flex; align-items: center; justify-content: center;
+      transition: all .15s; flex-shrink: 0;
+    }
+    .settings-btn:hover { background: var(--border); color: var(--text); border-color: var(--accent); }
+    .settings-btn.active { color: var(--accent); border-color: var(--accent); }
+
+    .refresh-btn {
+      width: 32px; height: 32px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 7px; color: var(--text2); cursor: pointer;
+      font-size: 16px; display: flex; align-items: center; justify-content: center;
+      transition: all .15s; flex-shrink: 0;
+    }
+    .refresh-btn:hover { background: var(--border); color: var(--accent); border-color: var(--accent); }
+    .refresh-btn.spinning .refresh-icon { animation: spin .6s ease; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .refresh-icon { display: inline-block; }
+
+    /* ══════════════════════════════════════
+       设置面板
+    ══════════════════════════════════════ */
+    .settings-panel {
+      display: none;
+      position: fixed; top: 60px; right: 16px; z-index: 200;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; width: 320px;
+      box-shadow: var(--shadow-lg);
+    }
+    .settings-panel.open { display: block; }
+    .settings-panel h3 {
+      font-size: 14px; font-weight: 700; margin-bottom: 14px; color: var(--text);
+    }
+    .settings-section { margin-bottom: 16px; }
+    .settings-section:last-child { margin-bottom: 0; }
+    .settings-label {
+      font-size: 11px; font-weight: 600; color: var(--text2);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+    }
+    .fit-toggle { display: flex; gap: 6px; }
+    .fit-btn {
+      flex: 1; padding: 7px 6px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text2); cursor: pointer;
+      font-size: 12px; text-align: center; transition: all .15s;
+    }
+    .fit-btn:hover { border-color: var(--accent); color: var(--text); }
+    .fit-btn.active { background: rgba(91,110,247,.1); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .ratio-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .ratio-btn {
+      padding: 7px 4px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text2); cursor: pointer;
+      font-size: 12px; text-align: center; transition: all .15s;
+    }
+    .ratio-btn:hover { border-color: var(--accent); color: var(--text); }
+    .ratio-btn.active { background: rgba(91,110,247,.1); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .ratio-preview { display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+    .ratio-box { background: rgba(91,110,247,.25); border-radius: 3px; }
+
+    /* ── 相册库管理 ── */
+    .lib-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .lib-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      background: var(--bg3); border: 1px solid var(--border);
+      font-size: 12px; transition: all .15s; cursor: pointer;
+    }
+    .lib-item:hover { border-color: var(--accent); }
+    .lib-item.active { border-color: var(--accent); background: rgba(91,110,247,.08); }
+    .lib-item.active .lib-name { color: var(--accent); font-weight: 600; }
+    .lib-checkbox {
+      width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0;
+      border: 2px solid var(--border); display: flex; align-items: center;
+      justify-content: center; transition: all .15s; cursor: pointer;
+    }
+    .lib-checkbox.checked {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .lib-checkbox.checked::after {
+      content: "✓"; color: #fff; font-size: 11px; font-weight: 700;
+    }
+    .lib-name { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lib-path { color: var(--text2); font-size: 10px; }
+    .lib-del-btn {
+      width: 22px; height: 22px; border: none; background: transparent;
+      color: var(--text2); cursor: pointer; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; transition: all .15s; flex-shrink: 0;
+    }
+    .lib-del-btn:hover { background: rgba(239,68,68,.12); color: #ef4444; }
+    .lib-add-form {
+      display: flex; gap: 6px;
+    }
+    .lib-input {
+      flex: 1; padding: 7px 10px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 7px; color: var(--text); font-size: 12px;
+      outline: none; transition: border-color .15s;
+    }
+    .lib-input:focus { border-color: var(--accent); }
+    .lib-input::placeholder { color: var(--text2); }
+    .lib-add-btn {
+      padding: 7px 14px;
+      background: var(--accent); border: none; color: #fff;
+      border-radius: 7px; font-size: 12px; cursor: pointer;
+      transition: opacity .15s; white-space: nowrap;
+    }
+    .lib-add-btn:hover { opacity: .85; }
+    .lib-add-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── 视频快捷键设置 ── */
+    .shortcut-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px; font-size: 12px;
+    }
+    .shortcut-label {
+      flex: 0 0 auto; color: var(--text2); min-width: 80px;
+    }
+    .shortcut-input {
+      width: 60px; padding: 5px 8px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 12px;
+      text-align: center; outline: none;
+    }
+    .shortcut-input:focus { border-color: var(--accent); }
+    .shortcut-unit {
+      color: var(--text2); font-size: 11px; flex: 0 0 auto;
+    }
+    .shortcut-hint {
+      font-size: 10px; color: var(--text2); margin-top: 4px; line-height: 1.5;
+    }
+    .shortcut-hint kbd {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 5px; font-size: 10px;
+      font-family: inherit;
+    }
+
+    /* ── 封面选择器 ── */
+    .cover-picker-overlay {
+      display: none; position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,.5); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+    }
+    .cover-picker-overlay.open { display: flex; }
+    .cover-picker {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+      width: 680px; max-width: 92vw; max-height: 80vh;
+      display: flex; flex-direction: column;
+      box-shadow: var(--shadow-lg);
+    }
+    .cover-picker-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .cover-picker-header h3 { font-size: 15px; font-weight: 700; color: var(--text); }
+    .cover-picker-close {
+      width: 28px; height: 28px; border: none; background: var(--bg3);
+      border-radius: 7px; cursor: pointer; font-size: 14px; color: var(--text2);
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .cover-picker-close:hover { background: var(--border); color: var(--text); }
+    .cover-picker-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 8px; overflow-y: auto; flex: 1; min-height: 0;
+    }
+    .cover-pick-item {
+      aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+      cursor: pointer; border: 2px solid transparent;
+      transition: border-color .15s, transform .15s;
+      background: var(--bg3); position: relative;
+    }
+    .cover-pick-item:hover { border-color: var(--accent); transform: scale(1.04); }
+    .cover-pick-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cover-pick-item .pick-path {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,.6));
+      color: #fff; font-size: 9px; padding: 12px 4px 3px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      pointer-events: none; opacity: 0; transition: opacity .15s;
+    }
+    .cover-pick-item:hover .pick-path { opacity: 1; }
+    .cover-picker-empty {
+      text-align: center; padding: 40px; color: var(--text2);
+      grid-column: 1 / -1;
+    }
+
+    /* ══════════════════════════════════════
+       主布局：侧边栏 + 内容区
+    ══════════════════════════════════════ */
+    .app-body {
+      display: flex;
+      position: fixed;
+      top: 52px; left: 0; right: 0; bottom: 0;
+    }
+
+    /* ── 侧边栏 ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      overflow-x: hidden;
+      transition: width .25s cubic-bezier(.4,0,.2,1), opacity .2s;
+      will-change: width;
+    }
+    .sidebar.collapsed { width: 0; opacity: 0; pointer-events: none; }
+    .sidebar-header {
+      padding: 12px 14px 8px;
+      font-size: 11px; font-weight: 700; color: var(--text2);
+      text-transform: uppercase; letter-spacing: .08em;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--bg2); z-index: 1;
+    }
+
+    /* 目录树节点 */
+    .tree-node { user-select: none; }
+    .tree-label {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px 6px 0;
+      cursor: pointer; border-radius: 6px;
+      transition: background .12s, color .12s;
+      font-size: 13px; color: var(--text2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tree-label:hover { background: var(--bg3); color: var(--text); }
+    .tree-label.active { background: rgba(91,110,247,.1); color: var(--accent); font-weight: 600; }
+    .tree-toggle {
+      width: 16px; height: 16px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--text2);
+      transition: transform .18s;
+    }
+    .tree-toggle.open { transform: rotate(90deg); }
+    .tree-toggle.leaf { opacity: 0; pointer-events: none; }
+    .tree-icon { flex-shrink: 0; font-size: 14px; }
+    .tree-name {
+      flex: 1; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tree-children { overflow: hidden; }
+    .tree-children.collapsed { display: none; }
+
+    /* ── 内容区 ── */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 0;
+    }
+    .content-inner { padding: 20px; }
+
+    /* ══════════════════════════════════════
+       统计 & 分区 & 筛选排序
+    ══════════════════════════════════════ */
+    .stats {
+      display: flex; gap: 14px; margin-bottom: 16px;
+      font-size: 13px; color: var(--text2); align-items: center;
+    }
+    .filter-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .filter-bar-label {
+      font-size: 12px; color: var(--text2); font-weight: 600;
+    }
+    .filter-select {
+      padding: 5px 8px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 0; color: var(--text); font-size: 12px;
+      outline: none; cursor: pointer;
+    }
+    .filter-select:focus { border-color: var(--accent); }
+    .section-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--text2); margin: 0 0 12px;
+    }
+
+    /* ══════════════════════════════════════
+       相册网格
+    ══════════════════════════════════════ */
+    .albums-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--cols), 1fr);
+      gap: 4px; margin-bottom: 28px;
+    }
+    .album-card {
+      cursor: pointer; border-radius: var(--radius); overflow: hidden;
+      background: #1a1d2e; border: none;
+      transition: transform .2s, box-shadow .2s;
+      /* 整个相册卡片比例 */
+      aspect-ratio: var(--card-ratio);
+      display: flex; flex-direction: column;
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+      position: relative;
+    }
+    .album-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.18), 0 2px 8px rgba(91,110,247,.15);
+    }
+    .album-card.selected {
+      outline: 3px solid var(--accent);
+      outline-offset: -3px;
+    }
+    /* 封面区域填满整个卡片 */
+    .album-cover-wrap {
+      flex: 1; min-height: 0;
+      overflow: hidden; background: #1a1d2e; position: relative;
+    }
+    .album-cover {
+      width: 100%; height: 100%;
+      object-fit: var(--fit-mode); display: block; transition: transform .3s;
+    }
+    .album-card:hover .album-cover { transform: scale(1.04); }
+    .album-cover-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center; font-size: 32px;
+      color: var(--text2);
+    }
+    .video-badge {
+      position: absolute; bottom: 6px; right: 6px;
+      background: rgba(0,0,0,.5); color: #fff;
+      font-size: 10px; padding: 2px 6px; border-radius: 4px;
+      backdrop-filter: blur(4px);
+    }
+    .album-info {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 16px 10px 8px; flex-shrink: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,.55));
+      color: #fff; pointer-events: none;
+    }
+    .album-name {
+      font-weight: 600; font-size: 12px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: #fff;
+    }
+    .album-count { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 2px; }
+
+    /* ── 文件夹封面：多图拼接 ── */
+    .album-mosaic {
+      width: 100%; height: 100%;
+      display: grid; gap: 2px;
+      background: var(--bg3);
+    }
+    .album-mosaic.cols-2 { grid-template-columns: 1fr 1fr; }
+    .album-mosaic.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .album-mosaic.cols-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    .album-mosaic img {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+    }
+    .album-mosaic .mosaic-more {
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(91,110,247,.85); color: #fff;
+      font-size: 13px; font-weight: 700;
+    }
+
+    /* ══════════════════════════════════════
+       媒体网格
+    ══════════════════════════════════════ */
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--cols), 1fr);
+      gap: 8px;
+    }
+    .photo-item {
+      position: relative; cursor: pointer;
+      border-radius: 0; overflow: hidden;
+      background: var(--bg2);
+      /* 整个卡片的比例 */
+      aspect-ratio: var(--card-ratio);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--border);
+    }
+    .photo-item img, .photo-item video {
+      width: 100%; height: 100%;
+      object-fit: var(--fit-mode); display: block;
+      transition: transform .25s;
+    }
+    .photo-item:hover img, .photo-item:hover video { transform: scale(1.06); }
+    .photo-item::after {
+      content: ""; position: absolute; inset: 0;
+      background: rgba(91,110,247,0); transition: background .2s; pointer-events: none;
+    }
+    .photo-item:hover::after { background: rgba(91,110,247,.08); }
+    .photo-name {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 14px 8px 6px;
+      background: linear-gradient(transparent, rgba(0,0,0,.5));
+      color: #fff; font-size: 11px; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      pointer-events: none;
+      opacity: 0; transition: opacity .2s;
+    }
+    .photo-item:hover .photo-name { opacity: 1; }
+    .photo-item:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
+    .media-badge {
+      position: absolute; bottom: 6px; right: 6px;
+      background: rgba(0,0,0,.5); color: #fff;
+      font-size: 10px; padding: 2px 6px; border-radius: 4px; pointer-events: none;
+      backdrop-filter: blur(4px);
+    }
+    .video-overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center; pointer-events: none;
+    }
+    .video-play-icon {
+      width: 42px; height: 42px; background: rgba(0,0,0,.45);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; color: #fff; transition: transform .2s, background .2s;
+    }
+    .photo-item:hover .video-play-icon { transform: scale(1.15); background: rgba(91,110,247,.8); }
+
+    /* 懒加载占位 */
+    .photo-item img[data-src], .photo-item video[data-src] { background: var(--bg3); }
+
+    /* ══════════════════════════════════════
+       空 & 加载 & 错误
+    ══════════════════════════════════════ */
+    .empty { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty h3 { font-size: 16px; margin-bottom: 6px; color: var(--text); }
+    .loading { display: flex; justify-content: center; align-items: center; height: 200px; gap: 8px; }
+    .loading-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: bounce .8s ease-in-out infinite; }
+    .loading-dot:nth-child(2) { animation-delay: .15s; }
+    .loading-dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-12px);opacity:1} }
+    .error-banner {
+      background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius);
+      padding: 14px 18px; margin-bottom: 16px; color: #dc2626; font-size: 13px;
+    }
+
+    /* ══════════════════════════════════════
+       灯箱
+    ══════════════════════════════════════ */
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,.97); flex-direction: column;
+    }
+    .lightbox.open { display: flex; }
+
+    /* 右键菜单 */
+    .lb-context-menu {
+      display: none; position: fixed; z-index: 1100;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 6px 0; min-width: 180px;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(16px);
+    }
+    .lb-context-menu.show { display: block; }
+    .lb-ctx-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; font-size: 13px; color: var(--text);
+      cursor: pointer; transition: background .12s;
+    }
+    .lb-ctx-item:hover { background: rgba(91,110,247,.1); color: var(--accent); }
+    .lb-ctx-item .ctx-icon { font-size: 14px; width: 20px; text-align: center; }
+    .lb-ctx-sep { height: 1px; background: var(--border); margin: 4px 10px; }
+    .lb-ctx-item.danger { color: #dc2626; }
+    .lb-ctx-item.danger:hover { background: rgba(220,38,38,.08); }
+
+    /* 工具栏 */
+    .lb-toolbar {
+      display: flex; align-items: center; padding: 8px 14px; gap: 10px;
+      flex-shrink: 0; background: rgba(0,0,0,.6);
+    }
+    .lb-title {
+      flex: 1; font-size: 13px; color: var(--text2);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .lb-counter { font-size: 12px; color: var(--text2); white-space: nowrap; }
+    .lb-btn {
+      background: rgba(255,255,255,.08); border: none; color: var(--text);
+      width: 32px; height: 32px; border-radius: 7px; cursor: pointer;
+      font-size: 16px; display: flex; align-items: center; justify-content: center;
+      transition: background .15s; flex-shrink: 0;
+    }
+    .lb-btn:hover { background: rgba(255,255,255,.18); }
+    .lb-btn.active { background: rgba(91,110,247,.35); color: var(--accent); }
+
+    /* 主舞台 */
+    .lb-stage {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden; min-height: 0;
+    }
+    .lb-img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      transition: opacity .18s; border-radius: 0; user-select: none;
+    }
+    .lb-img.fading { opacity: 0; }
+
+    /* ── 自定义视频播放器 ── */
+    .lb-video-wrap {
+      position: relative; max-width: 100%; max-height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; width: 100%; height: 100%;
+    }
+    .lb-video {
+      max-width: 100%; max-height: calc(100% - 56px);
+      background: #000; border-radius: 0;
+      display: block; outline: none; cursor: pointer;
+    }
+    /* 自定义控制条 */
+    .lb-vctrl {
+      width: 100%; max-width: 860px;
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 10px 16px 6px;
+      background: linear-gradient(transparent, rgba(0,0,0,.8));
+      border-radius: 0 0 0 0;
+      flex-shrink: 0;
+    }
+    /* 进度条 */
+    .lb-seek-wrap {
+      position: relative; height: 16px;
+      display: flex; align-items: center; cursor: pointer;
+    }
+    .lb-seek-track {
+      width: 100%; height: 4px; background: rgba(255,255,255,.2);
+      border-radius: 2px; position: relative; overflow: visible;
+    }
+    .lb-seek-buf {
+      position: absolute; left: 0; top: 0; height: 100%;
+      background: rgba(255,255,255,.25); border-radius: 2px;
+      pointer-events: none; transition: width .3s;
+    }
+    .lb-seek-fill {
+      position: absolute; left: 0; top: 0; height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px; pointer-events: none;
+    }
+    .lb-seek-thumb {
+      position: absolute; top: 50%; transform: translate(-50%, -50%);
+      width: 13px; height: 13px; border-radius: 50%;
+      background: #fff; box-shadow: 0 0 4px rgba(0,0,0,.6);
+      pointer-events: none; transition: transform .1s;
+    }
+    .lb-seek-wrap:hover .lb-seek-thumb { transform: translate(-50%,-50%) scale(1.3); }
+    /* 按钮行 */
+    .lb-vctrl-btns {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .lb-vbtn {
+      background: none; border: none; color: rgba(255,255,255,.85);
+      cursor: pointer; font-size: 18px; padding: 0; line-height: 1;
+      transition: color .15s, transform .1s; display: flex; align-items: center;
+    }
+    .lb-vbtn:hover { color: #fff; transform: scale(1.1); }
+    .lb-vbtn.sm { font-size: 14px; }
+    .lb-time { font-size: 12px; color: rgba(255,255,255,.7); white-space: nowrap; }
+    .lb-vol-wrap { display: flex; align-items: center; gap: 6px; }
+    .lb-vol {
+      -webkit-appearance: none; appearance: none;
+      width: 70px; height: 3px; background: rgba(255,255,255,.25);
+      border-radius: 2px; outline: none; cursor: pointer;
+    }
+    .lb-vol::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 11px; height: 11px;
+      border-radius: 50%; background: #fff; cursor: pointer;
+    }
+    .lb-speed-sel {
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+      color: rgba(255,255,255,.8); border-radius: 5px; font-size: 11px;
+      padding: 2px 5px; cursor: pointer;
+    }
+    .lb-spacer { flex: 1; }
+    .lb-fullscreen-btn { margin-left: auto; }
+
+    /* 视频OSD提示 */
+    .lb-video-osd {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,.6); color: #fff;
+      padding: 12px 24px; border-radius: 10px;
+      font-size: 20px; font-weight: 700;
+      pointer-events: none; opacity: 0;
+      transition: opacity .2s; z-index: 5;
+      backdrop-filter: blur(8px);
+    }
+    .lb-video-osd.show { opacity: 1; }
+
+    /* ── 信息面板 ── */
+    .lb-info-panel {
+      position: absolute; top: 0; right: 0; bottom: 0;
+      width: 280px; max-width: 40vw;
+      background: rgba(0,0,0,.75);
+      backdrop-filter: blur(16px);
+      border-left: 1px solid rgba(255,255,255,.08);
+      z-index: 20;
+      flex-direction: column;
+      padding: 20px 18px;
+      overflow-y: auto;
+      color: rgba(255,255,255,.85);
+      font-size: 13px;
+      transform: translateX(100%);
+      transition: transform .25s cubic-bezier(.4,0,.2,1);
+      visibility: hidden;
+      opacity: 0;
+    }
+    .lb-info-panel.open {
+      transform: translateX(0);
+      visibility: visible;
+      opacity: 1;
+      display: flex;
+    }
+    .lb-info-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .lb-info-header h3 {
+      font-size: 14px; font-weight: 700; color: #fff;
+    }
+    .lb-info-close {
+      width: 28px; height: 28px; border: none;
+      background: rgba(255,255,255,.1); color: rgba(255,255,255,.7);
+      border-radius: 6px; cursor: pointer; font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .lb-info-close:hover { background: rgba(255,255,255,.2); color: #fff; }
+    .lb-info-row {
+      display: flex; justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    .lb-info-row:last-child { border-bottom: none; }
+    .lb-info-label { color: rgba(255,255,255,.45); font-size: 12px; }
+    .lb-info-value { color: #fff; font-size: 13px; font-weight: 500; text-align: right; max-width: 55%; word-break: break-all; }
+    .lb-info-loading { text-align: center; padding: 30px; color: rgba(255,255,255,.4); }
+
+    /* 左右箭头 */
+    .lb-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,.12); border: none; color: #fff;
+      width: 60px; height: 90px; border-radius: 14px; cursor: pointer;
+      font-size: 30px; display: flex; align-items: center; justify-content: center;
+      transition: background .15s; z-index: 10;
+      backdrop-filter: blur(6px);
+    }
+    .lb-arrow:hover { background: rgba(255,255,255,.25); }
+    .lb-arrow.left  { left: 16px; }
+    .lb-arrow.right { right: 16px; }
+
+    /* ── 胶卷条 ── */
+    .lb-filmstrip {
+      flex-shrink: 0;
+      height: 108px;
+      display: flex; align-items: center;
+      padding: 0 10px;
+      gap: 5px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: rgba(255,255,255,.06);
+      border-top: 1px solid rgba(255,255,255,.08);
+      scroll-behavior: smooth;
+      cursor: grab;
+      user-select: none;
+      position: relative;
+      transition: height .2s ease, opacity .2s ease;
+    }
+    .lb-filmstrip.collapsed {
+      height: 0 !important;
+      padding: 0;
+      border-top: none;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .lb-filmstrip.dragging { cursor: grabbing; scroll-behavior: auto; }
+    .lb-filmstrip::-webkit-scrollbar { height: 5px; }
+    .lb-filmstrip::-webkit-scrollbar-track { background: transparent; }
+    .lb-filmstrip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    /* 胶卷条调整手柄 */
+    .lb-film-resize {
+      position: absolute; top: -4px; left: 0; right: 0; height: 8px;
+      cursor: ns-resize; z-index: 2;
+    }
+    .lb-film-resize::after {
+      content: ''; position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
+      width: 36px; height: 3px; border-radius: 2px;
+      background: rgba(255,255,255,.15); transition: background .15s;
+    }
+    .lb-film-resize:hover::after { background: rgba(255,255,255,.35); }
+    /* 胶卷条切换按钮 */
+    .lb-film-toggle {
+      position: absolute; top: -22px; right: 8px;
+      width: 28px; height: 20px; border-radius: 6px 6px 0 0;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1);
+      border-bottom: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: rgba(255,255,255,.4);
+      transition: all .15s; z-index: 3;
+    }
+    .lb-film-item {
+      flex-shrink: 0;
+      height: calc(100% - 16px); aspect-ratio: 1;
+      border-radius: 0; overflow: hidden; cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color .15s, transform .15s, opacity .15s;
+      background: var(--bg3);
+      position: relative;
+    }
+    .lb-film-item img, .lb-film-item video {
+      width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none;
+    }
+    .lb-film-item:hover { opacity: .85; }
+    .lb-film-item.active {
+      border-color: var(--accent);
+      transform: scale(1.05);
+      box-shadow: 0 0 12px rgba(91,110,247,.5);
+    }
+    .lb-film-item .film-video-icon {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; color: rgba(255,255,255,.8); pointer-events: none;
+    }
+
+    /* ══════════════════════════════════════
+       属性标识
+    ══════════════════════════════════════ */
+    .photo-badge-fav {
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(239,68,68,.85); color: #fff;
+      font-size: 12px; width: 22px; height: 22px;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      pointer-events: none; backdrop-filter: blur(4px);
+      opacity: 0; transition: opacity .2s;
+    }
+    .photo-item:hover .photo-badge-fav { opacity: 1; }
+    .photo-badge-fav.show { opacity: 1; }
+    .photo-badge-rating {
+      position: absolute; top: 6px; right: 6px;
+      background: rgba(0,0,0,.55); color: #fbbf24;
+      font-size: 11px; padding: 2px 6px; border-radius: 4px;
+      pointer-events: none; backdrop-filter: blur(4px);
+      opacity: 0; transition: opacity .2s;
+    }
+    .photo-item:hover .photo-badge-rating { opacity: 1; }
+    .photo-badge-rating.show { opacity: 1; }
+
+    /* ── 属性筛选标签 ── */
+    .filter-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 12px;
+      background: rgba(91,110,247,.1); border: 1px solid rgba(91,110,247,.3);
+      color: var(--accent); font-size: 12px; cursor: pointer;
+      transition: all .15s;
+    }
+    .filter-tag:hover { background: rgba(91,110,247,.2); }
+    .filter-tag.active { background: var(--accent); color: #fff; }
+    .filter-tag-fav {
+      color: #ef4444;
+    }
+
+    /* ── 相册标签徽章 ── */
+    .album-tag-badge {
+      display: inline-block;
+      background: rgba(91,110,247,.18);
+      color: var(--accent);
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 2px;
+      vertical-align: middle;
+    }
+
+    /* ── 媒体网格标签徽章 ── */
+    .photo-badge-tags {
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(91,110,247,.55); color: #fff;
+      font-size: 10px; padding: 2px 5px; border-radius: 4px;
+      backdrop-filter: blur(4px);
+      opacity: 0; transition: opacity .2s; pointer-events: none;
+    }
+    .photo-badge-tags.show { opacity: 1; }
+
+    /* ── 标签云面板 ── */
+    .tag-cloud-panel {
+      position: fixed; top: 48px; right: 0;
+      width: 260px; max-height: calc(100vh - 60px);
+      background: var(--bg2); border-left: 1px solid var(--border);
+      border-radius: 0 0 0 var(--radius);
+      padding: 12px; z-index: 100;
+      overflow-y: auto; box-shadow: -4px 4px 20px rgba(0,0,0,.15);
+      transform: translateX(100%); transition: transform .25s;
+    }
+    .tag-cloud-panel.open { transform: translateX(0); }
+    .tag-cloud-title {
+      font-size: 13px; font-weight: 600; color: var(--text);
+      margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .tag-cloud-close {
+      background: none; border: none; color: var(--text2); cursor: pointer;
+      font-size: 16px; padding: 0 4px; line-height: 1;
+    }
+    .tag-cloud-list {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+    }
+    .tag-cloud-item {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 14px;
+      background: rgba(91,110,247,.1); border: 1px solid rgba(91,110,247,.2);
+      color: var(--accent); font-size: 12px; cursor: pointer;
+      transition: all .15s; user-select: none;
+    }
+    .tag-cloud-item:hover { background: rgba(91,110,247,.2); }
+    .tag-cloud-item.active {
+      background: var(--accent); color: #fff;
+      border-color: var(--accent);
+    }
+    .tag-cloud-item .tag-count {
+      font-size: 10px; opacity: .7;
+    }
+    .tag-cloud-empty {
+      color: var(--text2); font-size: 12px; text-align: center;
+      padding: 20px 0;
+    }
+    .tag-filter-active {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
+    }
+    .tag-filter-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 12px;
+      background: var(--accent); color: #fff; font-size: 11px; cursor: pointer;
+    }
+    .tag-filter-chip:hover { opacity: .85; }
+    .tag-filter-chip .chip-x { font-size: 13px; line-height: 1; }
+
+    /* ── 批量操作工具栏 ── */
+    .batch-bar {
+      display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      z-index: 500;
+      background: rgba(26,29,46,.92); backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,.1); border-radius: 14px;
+      padding: 10px 18px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.3);
+      align-items: center; gap: 8px; color: rgba(255,255,255,.9);
+    }
+    .batch-bar.show { display: flex; }
+    .batch-bar-info { font-size: 12px; color: rgba(255,255,255,.6); margin-right: 4px; }
+    .batch-btn {
+      padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15);
+      background: rgba(255,255,255,.08); color: #fff; cursor: pointer;
+      font-size: 12px; transition: all .15s; display: flex; align-items: center; gap: 4px;
+    }
+    .batch-btn:hover { background: rgba(255,255,255,.18); }
+    .batch-btn.primary { background: var(--accent); border-color: var(--accent); }
+    .batch-btn.primary:hover { opacity: .85; }
+    .batch-btn.danger { border-color: #ef4444; color: #ef4444; }
+    .batch-btn.danger:hover { background: rgba(239,68,68,.15); }
+
+    /* ── 多选模式 ── */
+    .photo-item .select-check {
+      display: none; position: absolute; top: 6px; left: 6px;
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.7); background: rgba(0,0,0,.3);
+      align-items: center; justify-content: center;
+      cursor: pointer; z-index: 5; transition: all .15s;
+      backdrop-filter: blur(4px);
+    }
+    .select-mode .photo-item .select-check { display: flex; }
+    .select-mode .photo-item .photo-badge-fav { left: 32px; }
+    .select-mode .photo-item .photo-badge-rating { right: 6px; }
+    .photo-item.selected .select-check {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .photo-item.selected .select-check::after {
+      content: "✓"; color: #fff; font-size: 11px; font-weight: 700;
+    }
+    .photo-item.selected::before {
+      content: ""; position: absolute; inset: 0;
+      border: 2px solid var(--accent); pointer-events: none; z-index: 4;
+      border-radius: 0;
+    }
+
+    /* ── 加载更多指示器 ── */
+    .load-more-sentinel {
+      height: 1px; width: 100%;
+    }
+    .load-more-indicator {
+      text-align: center; padding: 20px; color: var(--text2); font-size: 13px;
+    }
+
+    /* ══════════════════════════════════════
+       滚动条
+    ══════════════════════════════════════ */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #c8cbd4; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a0a4b0; }
+
+    /* ══════════════════════════════════════
+       响应式
+    ══════════════════════════════════════ */
+    @media (max-width: 768px) {
+      :root { --cols: 3; --sidebar-w: 200px; }
+      .content-inner { padding: 10px; }
+      .col-slider-group { display: none; }
+      .lb-arrow { width: 48px; height: 68px; font-size: 24px; }
+      .lb-film-item { max-width: 72px; }
+      .lb-filmstrip { height: 80px; }
+    }
+    @media (max-width: 480px) {
+      :root { --cols: 2; }
+      .settings-panel { width: calc(100vw - 24px); right: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ 导航 ══ -->
+<nav class="navbar">
+  <button class="sidebar-toggle active" id="sidebar-toggle" onclick="toggleSidebar()" title="目录树">☰</button>
+  <div class="navbar-logo">📸 相册</div>
+  <div class="breadcrumb" id="breadcrumb">
+    <span class="breadcrumb-item active" onclick="navigate('')">全部相册</span>
+  </div>
+  <div class="navbar-controls">
+    <!-- 全局筛选排序 -->
+    <div class="filter-bar" style="margin:0;gap:6px" id="global-filter-bar">
+      <select class="filter-select" onchange="setFilter(this.value)" id="global-filter">
+        <option value="all">全部</option>
+        <option value="image">图片</option>
+        <option value="video">视频</option>
+        <option value="favorite">⭐ 收藏</option>
+      </select>
+      <select class="filter-select" onchange="setSortAndDir(this.value)" id="global-sort">
+        <option value="name-asc">名称 ↑</option>
+        <option value="name-desc">名称 ↓</option>
+        <option value="date-asc">日期 ↑</option>
+        <option value="date-desc">日期 ↓</option>
+        <option value="size-asc">大小 ↑</option>
+        <option value="size-desc">大小 ↓</option>
+      </select>
+      <div id="active-tag-filter" style="display:none"></div>
+      <button class="settings-btn" style="width:auto;padding:0 8px;font-size:12px" onclick="toggleTagCloud()" title="标签筛选 (T)">🏷</button>
+      <button class="settings-btn" style="width:auto;padding:0 8px;font-size:12px" onclick="toggleBatchMode()" title="批量操作 (B)">☑</button>
+    </div>
+    <div class="col-slider-group">
+      <span class="col-slider-label">列数</span>
+      <input type="range" class="col-slider" id="col-slider" min="2" max="10" value="5" oninput="onColChange(this.value)" />
+      <span class="col-val" id="col-val">5</span>
+    </div>
+    <button class="settings-btn" id="settings-btn" onclick="toggleSettings()" title="显示设置">⚙</button>
+    <button class="refresh-btn" id="refresh-btn" onclick="refreshAll()" title="刷新相册库"><span class="refresh-icon">🔄</span></button>
+  </div>
+</nav>
+
+<!-- ══ 设置面板 ══ -->
+<div class="settings-panel" id="settings-panel">
+  <h3>⚙ 显示设置</h3>
+  <div class="settings-section">
+    <div class="settings-label">卡片填充方式</div>
+    <div class="fit-toggle">
+      <button class="fit-btn active" id="fit-cover" onclick="setFitMode('cover')">
+        <div style="font-size:16px;margin-bottom:3px">⬛</div>填充裁剪
+      </button>
+      <button class="fit-btn" id="fit-contain" onclick="setFitMode('contain')">
+        <div style="font-size:16px;margin-bottom:3px">🖼</div>完整显示
+      </button>
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="settings-label">卡片比例</div>
+    <div class="ratio-grid" id="ratio-grid">
+      <button class="ratio-btn active" data-ratio="1/1" onclick="setRatio('1/1',this)">
+        <div class="ratio-preview"><div class="ratio-box" style="width:26px;height:26px"></div></div>1 : 1
+      </button>
+      <button class="ratio-btn" data-ratio="3/4" onclick="setRatio('3/4',this)">
+        <div class="ratio-preview"><div class="ratio-box" style="width:21px;height:28px"></div></div>3 : 4
+      </button>
+      <button class="ratio-btn" data-ratio="4/3" onclick="setRatio('4/3',this)">
+        <div class="ratio-preview"><div class="ratio-box" style="width:28px;height:21px"></div></div>4 : 3
+      </button>
+      <button class="ratio-btn" data-ratio="16/9" onclick="setRatio('16/9',this)">
+        <div class="ratio-preview"><div class="ratio-box" style="width:32px;height:18px"></div></div>16 : 9
+      </button>
+      <button class="ratio-btn" data-ratio="9/16" onclick="setRatio('9/16',this)">
+        <div class="ratio-preview"><div class="ratio-box" style="width:18px;height:32px"></div></div>9 : 16
+      </button>
+      <button class="ratio-btn" data-ratio="auto" onclick="setRatio('auto',this)">
+        <div class="ratio-preview" style="height:32px;align-items:center"><span style="font-size:15px">↔</span></div>自动
+      </button>
+    </div>
+  </div>
+
+  <div class="settings-section" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+    <div class="settings-label">视频快捷键</div>
+    <div class="shortcut-row">
+      <span class="shortcut-label">左右箭头</span>
+      <input class="shortcut-input" id="sk-seek" type="number" min="1" max="60" value="5" onchange="saveShortcuts()" />
+      <span class="shortcut-unit">秒</span>
+      <span style="color:var(--text2);font-size:11px;margin-left:auto">前进/后退</span>
+    </div>
+    <div class="shortcut-row">
+      <span class="shortcut-label">长按倍速</span>
+      <input class="shortcut-input" id="sk-longspeed" type="number" min="1" max="16" step="0.5" value="3" onchange="saveShortcuts()" />
+      <span class="shortcut-unit">×</span>
+      <span style="color:var(--text2);font-size:11px;margin-left:auto">长按箭头</span>
+    </div>
+    <div class="shortcut-row">
+      <span class="shortcut-label">PageUp/Dn</span>
+      <span class="shortcut-label" style="min-width:auto">上一个 / 下一个</span>
+    </div>
+    <div class="shortcut-hint">
+      <kbd>←</kbd><kbd>→</kbd> 视频 seek &nbsp; <kbd>PageUp</kbd><kbd>PageDown</kbd> 切换媒体<br>
+      长按左右箭头持续以设定倍速播放
+    </div>
+  </div>
+
+  <div class="settings-section" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+    <div class="settings-label">相册库管理</div>
+    <div class="lib-list" id="lib-list"></div>
+    <div class="lib-add-form">
+      <input class="lib-input" id="lib-path-input" type="text" placeholder="输入文件夹路径..." />
+      <button class="lib-add-btn" id="lib-add-btn" onclick="addLibrary()">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 主体 ══ -->
+<div class="app-body">
+
+  <!-- 左侧目录树 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">目录</div>
+    <div id="tree-root" style="padding:6px 6px 12px"></div>
+  </aside>
+
+  <!-- 右侧内容 -->
+  <div class="content" id="content">
+    <div class="content-inner" id="main">
+      <div class="loading">
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 灯箱 ══ -->
+<div class="lightbox" id="lightbox">
+  <!-- 工具栏 -->
+  <div class="lb-toolbar">
+    <span class="lb-title" id="lb-title"></span>
+    <span class="lb-counter" id="lb-counter"></span>
+    <button class="lb-btn" id="lb-info-btn" onclick="toggleInfoPanel()" title="文件信息 (I)">ℹ</button>
+    <button class="lb-btn" onclick="closeLightbox()" title="关闭 (Esc)">✕</button>
+  </div>
+
+  <!-- 舞台 -->
+  <div class="lb-stage" id="lb-stage" onclick="closeLightbox()">
+    <button class="lb-arrow left"  onclick="event.stopPropagation();prevMedia()" title="上一个 (←)">‹</button>
+
+    <!-- 图片 -->
+    <img class="lb-img" id="lb-img" alt="" style="display:none" onclick="event.stopPropagation()" />
+
+    <!-- 视频（含自定义控制条） -->
+    <div class="lb-video-wrap" id="lb-video-wrap" style="display:none" onclick="event.stopPropagation()">
+      <video class="lb-video" id="lb-video" playsinline preload="metadata"></video>
+      <div class="lb-video-osd" id="lb-video-osd"></div>
+      <div class="lb-vctrl" id="lb-vctrl">
+        <!-- 进度条 -->
+        <div class="lb-seek-wrap" id="lb-seek-wrap">
+          <div class="lb-seek-track">
+            <div class="lb-seek-buf"  id="lb-seek-buf"></div>
+            <div class="lb-seek-fill" id="lb-seek-fill"></div>
+            <div class="lb-seek-thumb" id="lb-seek-thumb"></div>
+          </div>
+        </div>
+        <!-- 按钮行 -->
+        <div class="lb-vctrl-btns">
+          <button class="lb-vbtn" id="lb-play-pause" onclick="toggleVideoPlay()" title="播放/暂停 (空格)">▶</button>
+          <div class="lb-vol-wrap">
+            <button class="lb-vbtn sm" id="lb-mute-btn" onclick="toggleMute()" title="静音">🔊</button>
+            <input type="range" class="lb-vol" id="lb-vol" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)" />
+          </div>
+          <span class="lb-time" id="lb-time">0:00 / 0:00</span>
+          <div class="lb-spacer"></div>
+          <select class="lb-speed-sel" id="lb-speed-sel" onchange="setVideoSpeed(this.value)" title="倍速">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+          <button class="lb-vbtn sm lb-fullscreen-btn" onclick="toggleFullscreen()" title="全屏">⛶</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="lb-arrow right" onclick="event.stopPropagation();nextMedia()" title="下一个 (→)">›</button>
+
+    <!-- 信息面板 -->
+    <div class="lb-info-panel" id="lb-info-panel" onclick="event.stopPropagation()">
+      <div class="lb-info-header">
+        <h3>ℹ 文件信息</h3>
+        <button class="lb-info-close" onclick="closeInfoPanel()">✕</button>
+      </div>
+      <div id="lb-info-content">
+        <div class="lb-info-loading">加载中...</div>
+      </div>
+      <div id="lb-info-edit" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)">
+        <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600">属性编辑</div>
+        <div style="margin-bottom:10px">
+          <input type="text" id="meta-title-input" placeholder="标题（可选）"
+            style="width:100%;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;font-size:12px;outline:none" />
+        </div>
+        <div style="margin-bottom:10px">
+          <textarea id="meta-desc-input" placeholder="备注（可选）" rows="2"
+            style="width:100%;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;font-size:12px;outline:none;resize:vertical"></textarea>
+        </div>
+        <div style="margin-bottom:10px">
+          <input type="text" id="meta-tags-input" placeholder="标签，逗号分隔（可选）"
+            style="width:100%;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;font-size:12px;outline:none" />
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <button id="meta-fav-btn" onclick="toggleMetaFavorite()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;cursor:pointer;font-size:16px;padding:4px 10px;transition:all .15s">☆</button>
+          <div id="meta-rating-edit" style="font-size:20px;cursor:pointer;letter-spacing:2px" onclick="editMetaRating()">☆☆☆☆☆</div>
+          <span id="meta-rating-val" style="color:rgba(255,255,255,.4);font-size:12px"></span>
+        </div>
+        <div style="margin-bottom:10px">
+          <input type="text" id="meta-location-input" placeholder="拍摄地点（可选）"
+            style="width:100%;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;font-size:12px;outline:none" />
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="saveMetadata()" style="padding:6px 16px;background:var(--accent);border:none;color:#fff;border-radius:7px;cursor:pointer;font-size:12px">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 胶卷条 -->
+  <div class="lb-filmstrip" id="lb-filmstrip" onclick="event.stopPropagation()">
+    <div class="lb-film-resize" id="lb-film-resize"></div>
+    <div class="lb-film-toggle" id="lb-film-toggle" onclick="toggleFilmstrip()" title="显示/隐藏胶卷条">▾</div>
+  </div>
+</div>
+
+<!-- 右键菜单 -->
+<div class="lb-context-menu" id="lb-ctx-menu">
+  <div class="lb-ctx-item" id="ctx-edit-tags" onclick="ctxEditTags()">
+    <span class="ctx-icon">🏷</span>编辑标签
+  </div>
+  <div class="lb-ctx-sep"></div>
+  <div class="lb-ctx-item" id="ctx-set-cover" onclick="ctxSetCover()">
+    <span class="ctx-icon">🖼</span>选择相册封面
+  </div>
+  <div class="lb-ctx-item" id="ctx-set-cover-direct" onclick="ctxSetCoverDirect()">
+    <span class="ctx-icon">🔖</span>设为当前相册封面
+  </div>
+  <div class="lb-ctx-item" id="ctx-reset-cover" onclick="ctxResetCover()">
+    <span class="ctx-icon">🔄</span>恢复默认封面
+  </div>
+  <div class="lb-ctx-sep"></div>
+  <div class="lb-ctx-item" onclick="ctxClose()">
+    <span class="ctx-icon">✕</span>关闭菜单
+  </div>
+</div>
+
+<!-- 封面选择器弹窗 -->
+<div class="cover-picker-overlay" id="cover-picker-overlay">
+  <div class="cover-picker">
+    <div class="cover-picker-header">
+      <h3>🖼 选择封面图片</h3>
+      <button class="cover-picker-close" onclick="closeCoverPicker()">✕</button>
+    </div>
+    <div class="cover-picker-grid" id="cover-picker-grid">
+      <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 批量操作工具栏 -->
+<div class="batch-bar" id="batch-bar">
+  <span class="batch-bar-info" id="batch-info">已选 0 项</span>
+  <button class="batch-btn primary" onclick="batchFavorite()">⭐ 收藏</button>
+  <button class="batch-btn primary" onclick="batchAddTagShow()">🏷 加标签</button>
+  <button class="batch-btn" onclick="batchSetRatingShow()">⭐ 评分</button>
+  <button class="batch-btn danger" onclick="batchCancelSelection()">✕ 取消</button>
+</div>
+
+<!-- 批量加标签弹窗 -->
+<div class="cover-picker-overlay" id="batch-tag-overlay">
+  <div class="cover-picker" style="width:420px">
+    <div class="cover-picker-header">
+      <h3>🏷 批量添加标签</h3>
+      <button class="cover-picker-close" onclick="closeBatchTag()">✕</button>
+    </div>
+    <div style="padding:0 4px">
+      <input type="text" id="batch-tag-input" placeholder="输入标签，多个用逗号分隔..."
+        style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;outline:none;margin-bottom:10px"
+        onkeydown="if(event.key==='Enter')batchAddTagConfirm()" />
+      <div id="batch-tag-suggestions" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="lib-add-btn" style="background:var(--bg3);color:var(--text)" onclick="closeBatchTag()">取消</button>
+        <button class="lib-add-btn" onclick="batchAddTagConfirm()">确认添加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑标签弹窗（相册/目录级） -->
+<div class="cover-picker-overlay" id="edit-tag-overlay">
+  <div class="cover-picker" style="width:460px">
+    <div class="cover-picker-header">
+      <h3>🏷 编辑标签</h3>
+      <button class="cover-picker-close" onclick="closeEditTag()">✕</button>
+    </div>
+    <div style="padding:0 4px">
+      <div id="edit-tag-target-info" style="font-size:12px;color:var(--text2);margin-bottom:10px"></div>
+      <div id="edit-tag-current" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+      <input type="text" id="edit-tag-input" placeholder="输入标签，多个用逗号分隔，回车确认..."
+        style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;outline:none;margin-bottom:10px"
+        onkeydown="if(event.key==='Enter')editTagConfirm()" />
+      <div id="edit-tag-suggestions" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="lib-add-btn" style="background:var(--bg3);color:var(--text)" onclick="closeEditTag()">取消</button>
+        <button class="lib-add-btn" onclick="editTagConfirm()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 批量评分弹窗 -->
+<div class="cover-picker-overlay" id="batch-rating-overlay">
+  <div class="cover-picker" style="width:320px">
+    <div class="cover-picker-header">
+      <h3>⭐ 批量评分</h3>
+      <button class="cover-picker-close" onclick="closeBatchRating()">✕</button>
+    </div>
+    </div>
+    <div style="padding:0 4px;text-align:center">
+      <div id="batch-rating-stars" style="font-size:36px;cursor:pointer;margin:16px 0;letter-spacing:4px">☆☆☆☆☆</div>
+      <div id="batch-rating-label" style="font-size:13px;color:var(--text2);margin-bottom:16px">点击星星设置评分</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="lib-add-btn" style="background:var(--bg3);color:var(--text)" onclick="closeBatchRating()">取消</button>
+        <button class="lib-add-btn" onclick="batchSetRatingConfirm()">确认</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 标签云面板 -->
+<div class="tag-cloud-panel" id="tag-cloud-panel">
+  <div class="tag-cloud-title">
+    <span>🏷 标签筛选</span>
+    <button class="tag-cloud-close" onclick="toggleTagCloud()">✕</button>
+  </div>
+  <div class="tag-filter-active" id="tag-filter-active"></div>
+  <div class="tag-cloud-list" id="tag-cloud-list"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// 状态
+// ══════════════════════════════════════════════════════════
+let currentPath   = "";
+let currentMedia  = [];   // [{path,type,name,library_root}, ...]
+let lightboxIndex = 0;
+let sidebarOpen   = true;
+let treeLoaded    = false;
+let currentFilter = "all";    // all / image / video / favorite
+let currentSort   = "name";   // name / date / size
+let currentSortDir = "asc";   // asc / desc
+let rawPageData  = null;  // 完整的页面数据
+
+// 标签筛选状态
+let activeTagFilters = [];   // 当前选中的标签列表
+let allTagsCache = [];       // 缓存所有标签
+let tagCloudOpen = false;    // 标签云面板是否打开
+
+// 无限滚动状态
+let infiniteScroll = false;
+let scrollOffset = 0;
+let scrollLoading = false;
+let scrollHasMore = false;
+let scrollTotalCount = 0;
+
+// 批量操作状态
+let batchMode = false;
+let selectedItems = new Set();  // idx set
+
+// 当前编辑的属性
+let currentMeta = null;
+let currentMetaRating = 0;
+
+// IntersectionObserver 懒加载
+let lazyObserver = null;
+let scrollObserver = null;
+
+// 封面选择器状态
+let coverPickerAlbum = "";
+let coverPickerRoot = "";
+
+// 从 localStorage 恢复设置
+const settings = {
+  cols:        parseInt(localStorage.getItem("pg_cols")    || "5"),
+  fitMode:     localStorage.getItem("pg_fit")              || "cover",
+  ratio:       localStorage.getItem("pg_ratio")            || "1/1",
+  sidebarOpen: localStorage.getItem("pg_sidebar") !== "0",
+};
+
+// 视频快捷键设置
+const videoKeys = {
+  seek:     parseInt(localStorage.getItem("pg_vk_seek")     || "5"),
+  longSpeed: parseFloat(localStorage.getItem("pg_vk_longspeed") || "3"),
+};
+
+// ══════════════════════════════════════════════════════════
+// 初始化
+// ══════════════════════════════════════════════════════════
+function init() {
+  initSettings();
+  sidebarOpen = settings.sidebarOpen;
+  if (!sidebarOpen) {
+    document.getElementById("sidebar").classList.add("collapsed");
+    document.getElementById("sidebar-toggle").classList.remove("active");
+  }
+  loadTree();
+  navigate("");
+  initLazyObserver();
+}
+
+// ══════════════════════════════════════════════════════════
+// 设置
+// ══════════════════════════════════════════════════════════
+function initSettings() {
+  const slider = document.getElementById("col-slider");
+  slider.value = settings.cols;
+  document.getElementById("col-val").textContent = settings.cols;
+  document.documentElement.style.setProperty("--cols", settings.cols);
+  applyFitMode(settings.fitMode, false);
+  applyRatio(settings.ratio, false);
+  // 恢复视频快捷键设置
+  document.getElementById("sk-seek").value = videoKeys.seek;
+  document.getElementById("sk-longspeed").value = videoKeys.longSpeed;
+}
+function onColChange(val) {
+  val = parseInt(val);
+  settings.cols = val;
+  document.getElementById("col-val").textContent = val;
+  document.documentElement.style.setProperty("--cols", val);
+  localStorage.setItem("pg_cols", val);
+}
+function toggleSettings() {
+  const panel = document.getElementById("settings-panel");
+  const btn   = document.getElementById("settings-btn");
+  const open  = panel.classList.toggle("open");
+  btn.classList.toggle("active", open);
+  if (open) loadLibraries();
+}
+document.addEventListener("click", e => {
+  const panel = document.getElementById("settings-panel");
+  const btn   = document.getElementById("settings-btn");
+  if (panel.classList.contains("open") && !panel.contains(e.target) && !btn.contains(e.target)) {
+    panel.classList.remove("open");
+    btn.classList.remove("active");
+  }
+});
+function setFitMode(m) { applyFitMode(m, true); }
+function applyFitMode(m, save) {
+  settings.fitMode = m;
+  document.documentElement.style.setProperty("--fit-mode", m);
+  document.getElementById("fit-cover").classList.toggle("active",   m === "cover");
+  document.getElementById("fit-contain").classList.toggle("active", m === "contain");
+  if (save) localStorage.setItem("pg_fit", m);
+}
+function setRatio(r, btn) {
+  applyRatio(r, true);
+  document.querySelectorAll(".ratio-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+function applyRatio(r, save) {
+  settings.ratio = r;
+  const styleId  = "dynamic-ratio-style";
+  let   styleEl  = document.getElementById(styleId);
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = styleId;
+    document.head.appendChild(styleEl);
+  }
+  if (r === "auto") {
+    document.documentElement.style.setProperty("--card-ratio", "unset");
+    styleEl.textContent = `
+      .photo-item { aspect-ratio: unset !important; height: calc((100vw - var(--sidebar-w, 0px) - 40px) / var(--cols) * 0.75); }
+      .album-card { aspect-ratio: unset !important; height: calc((100vw - var(--sidebar-w, 0px) - 40px) / var(--cols) * 1.1); }
+    `;
+  } else {
+    document.documentElement.style.setProperty("--card-ratio", r);
+    styleEl.textContent = "";
+  }
+  if (save) localStorage.setItem("pg_ratio", r);
+  document.querySelectorAll(".ratio-btn").forEach(b => b.classList.toggle("active", b.dataset.ratio === r));
+}
+
+function saveShortcuts() {
+  videoKeys.seek = parseInt(document.getElementById("sk-seek").value) || 5;
+  videoKeys.longSpeed = parseFloat(document.getElementById("sk-longspeed").value) || 3;
+  localStorage.setItem("pg_vk_seek", videoKeys.seek);
+  localStorage.setItem("pg_vk_longspeed", videoKeys.longSpeed);
+}
+
+// ══════════════════════════════════════════════════════════
+// 侧边栏
+// ══════════════════════════════════════════════════════════
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  document.getElementById("sidebar").classList.toggle("collapsed", !sidebarOpen);
+  document.getElementById("sidebar-toggle").classList.toggle("active", sidebarOpen);
+  localStorage.setItem("pg_sidebar", sidebarOpen ? "1" : "0");
+}
+
+// ══════════════════════════════════════════════════════════
+// 目录树
+// ══════════════════════════════════════════════════════════
+async function loadTree() {
+  const container = document.getElementById("tree-root");
+  container.innerHTML = "";
+  treeLoaded = false;
+  try {
+    const res  = await fetch("/api/tree");
+    const data = await res.json();
+    renderTree(data.tree, container, 0);
+    treeLoaded = true;
+  } catch(e) {
+    container.innerHTML =
+      `<div style="padding:10px 14px;font-size:12px;color:var(--text2)">目录加载失败</div>`;
+  }
+}
+
+function renderTree(nodes, container, depth) {
+  if (!nodes || nodes.length === 0) return;
+  nodes.forEach(node => {
+    const hasChildren = node.children && node.children.length > 0;
+    const indent = depth * 14 + 8;
+
+    const wrap = document.createElement("div");
+    wrap.className = "tree-node";
+
+    const label = document.createElement("div");
+    label.className = "tree-label";
+    label.dataset.path = node.rel_path;
+    label.style.paddingLeft = `${indent}px`;
+    label.innerHTML = `
+      <span class="tree-toggle ${hasChildren ? "" : "leaf"}">▶</span>
+      <span class="tree-icon">${hasChildren ? "📁" : "🖼"}</span>
+      <span class="tree-name" title="${escapeAttr(node.dir_name)}">${escapeHtml(node.dir_name)}</span>
+    `;
+    label.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // 展开/折叠
+      if (hasChildren) {
+        const children = wrap.querySelector(".tree-children");
+        const toggle   = label.querySelector(".tree-toggle");
+        const isOpen   = !children.classList.contains("collapsed");
+        children.classList.toggle("collapsed", isOpen);
+        toggle.classList.toggle("open", !isOpen);
+        label.querySelector(".tree-icon").textContent = (!isOpen) ? "📂" : "📁";
+      }
+      // 导航
+      navigate(node.rel_path);
+      // 激活高亮
+      document.querySelectorAll(".tree-label").forEach(l => l.classList.remove("active"));
+      label.classList.add("active");
+    });
+
+    wrap.appendChild(label);
+
+    if (hasChildren) {
+      const toggle = label.querySelector(".tree-toggle");
+      const icon   = label.querySelector(".tree-icon");
+      const childWrap = document.createElement("div");
+      childWrap.className = "tree-children collapsed";
+      renderTree(node.children, childWrap, depth + 1);
+      wrap.appendChild(childWrap);
+    }
+
+    container.appendChild(wrap);
+  });
+}
+
+// 同步树的激活状态
+function syncTreeActive(path) {
+  document.querySelectorAll(".tree-label").forEach(l => {
+    const isActive = l.dataset.path === path;
+    l.classList.toggle("active", isActive);
+    if (isActive) {
+      // 展开父节点
+      let el = l.parentElement;
+      while (el && !el.classList.contains("tree-root")) {
+        if (el.classList.contains("tree-children")) {
+          el.classList.remove("collapsed");
+          const parentLabel = el.previousElementSibling;
+          if (parentLabel) {
+            parentLabel.querySelector(".tree-toggle")?.classList.add("open");
+            const icon = parentLabel.querySelector(".tree-icon");
+            if (icon) icon.textContent = "📂";
+          }
+        }
+        el = el.parentElement;
+      }
+      // 滚动到视野
+      l.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// 懒加载
+// ══════════════════════════════════════════════════════════
+function initLazyObserver() {
+  if (!("IntersectionObserver" in window)) return;
+  lazyObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      if (el.dataset.src) {
+        el.src = el.dataset.src;
+        delete el.dataset.src;
+        lazyObserver.unobserve(el);
+      }
+    });
+  }, { rootMargin: "200px" });
+}
+
+function observeLazy(el) {
+  if (lazyObserver) lazyObserver.observe(el);
+  else if (el.dataset.src) { el.src = el.dataset.src; delete el.dataset.src; }
+}
+
+// ══════════════════════════════════════════════════════════
+// 导航 & 渲染
+// ══════════════════════════════════════════════════════════
+async function navigate(path) {
+  currentPath = path;
+  currentFilter = "all";
+  document.getElementById("global-filter").value = "all";
+  stopInfiniteScroll();
+  exitBatchMode();
+  showLoading();
+  syncTreeActive(path);
+  try {
+    const res  = await fetch(`/api/albums?path=${encodeURIComponent(path)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderPage(data);
+  } catch(e) {
+    renderError(e.message);
+  }
+}
+
+function showLoading() {
+  document.getElementById("main").innerHTML = `
+    <div class="loading">
+      <div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div>
+    </div>`;
+}
+function renderError(msg) {
+  document.getElementById("main").innerHTML = `
+    <div class="error-banner">⚠️ 加载失败：${msg}<br>
+    <small>请检查 config.yaml → photo_root 是否正确，以及挂载状态。</small></div>`;
+}
+
+function renderPage(data) {
+  renderBreadcrumb(data.breadcrumbs, data.current_path);
+  rawPageData = data;
+  renderPageContent(data);
+}
+
+function renderPageContent(data) {
+  const images = data.images;
+  const filtered = applyFilterAndSort(images);
+  currentMedia = filtered.map(item => ({ path: item.path, type: item.type, name: item.name, library_root: item.library_root || "", meta_favorite: item.meta_favorite, meta_rating: item.meta_rating, meta_tags: item.meta_tags }));
+
+  let html = "";
+
+  // 统计
+  const parts = [];
+  if (data.total_albums > 0) parts.push(`📁 ${data.total_albums} 个相册`);
+  if (data.total_images > 0) parts.push(`🖼️ ${data.total_images} 张照片`);
+  if (data.total_videos > 0) parts.push(`🎬 ${data.total_videos} 个视频`);
+  if (parts.length) html += `<div class="stats">${parts.map(p=>`<span>${p}</span>`).join("")}</div>`;
+
+  // 全局筛选非"全部"时，隐藏相册卡片，只显示媒体
+  const showAlbums = currentFilter === "all";
+
+  if (data.total_albums === 0 && images.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">📭</div><h3>此文件夹为空</h3><p>没有找到相册、照片或视频</p></div>`;
+    document.getElementById("main").innerHTML = html;
+    return;
+  }
+
+  // 相册（筛选非"全部"时隐藏）
+  if (showAlbums && data.albums.length > 0) {
+    html += renderAlbumsHtml(data.albums);
+  }
+
+  // 媒体网格（受筛选和排序影响）
+  if (images.length > 0) {
+    if (showAlbums && data.albums.length > 0) html += `<div class="section-title" style="margin-top:12px">媒体</div>`;
+    if (filtered.length > 0) {
+      html += `<span style="font-size:11px;color:var(--text2);display:inline-block;margin-bottom:10px">${filtered.length} 项媒体</span>`;
+      html += renderMediaGrid(filtered);
+    } else {
+      html += `<div class="empty"><div class="empty-icon">🔍</div><h3>没有匹配的媒体</h3><p>当前筛选条件下无结果</p></div>`;
+    }
+  }
+
+  document.getElementById("main").innerHTML = html;
+  requestAnimationFrame(() => {
+    document.querySelectorAll("img[data-src]").forEach(observeLazy);
+  });
+}
+
+function renderAlbumsHtml(albums) {
+  let html = `<div class="section-title">相册</div><div class="albums-grid">`;
+  for (const album of albums) {
+    let coverHtml = "";
+    const root = album.library_root || "";
+    if (album.cover) {
+      if (album.cover_type === "video") {
+        coverHtml = `<div class="album-cover-wrap"><img class="album-cover" data-src="${vthumbUrl(album.cover, root)}" src="" alt="" loading="lazy" /><span class="video-badge">🎬</span></div>`;
+      } else {
+        coverHtml = `<div class="album-cover-wrap"><img class="album-cover" data-src="${thumbUrl(album.cover, root)}" src="" alt="" loading="lazy" /></div>`;
+      }
+    } else {
+      coverHtml = `<div class="album-cover-wrap"><div class="album-cover-placeholder">📁</div></div>`;
+    }
+    const countParts = [];
+    if (album.img_count) countParts.push(`${album.img_count} 张`);
+    if (album.vid_count) countParts.push(`${album.vid_count} 视频`);
+    html += `<div class="album-card${selectedAlbums.has(album.path)?' selected':''}" onclick="${batchMode ? `toggleSelectAlbum('${escapeAttr(album.path)}', event)` : `navigate('${escapeAttr(album.path)}')`}" oncontextmenu="showAlbumContextMenu(event,'${escapeAttr(album.path)}','${escapeAttr(root)}')">
+      ${coverHtml}
+      <div class="album-info">
+        <div class="album-name" title="${escapeAttr(album.name)}">${escapeHtml(album.name)}</div>
+        <div class="album-count">${countParts.join(" · ") || (album.is_dir_only ? '子相册' : '空')}${album.meta_tags && album.meta_tags.length ? ' · ' + album.meta_tags.slice(0,3).map(t => `<span class="album-tag-badge">${escapeHtml(t)}</span>`).join('') + (album.meta_tags.length > 3 ? `<span class="album-tag-badge">+${album.meta_tags.length-3}</span>` : '') : ''}</div>
+      </div>
+    </div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function renderFilterBar(count, total) {
+  return `<div class="filter-bar">
+    <span class="filter-bar-label">筛选：</span>
+    <select class="filter-select" onchange="setFilter(this.value)">
+      <option value="all" ${currentFilter==='all'?'selected':''}>全部</option>
+      <option value="image" ${currentFilter==='image'?'selected':''}>仅图片</option>
+      <option value="video" ${currentFilter==='video'?'selected':''}>仅视频</option>
+    </select>
+    <span class="filter-bar-label" style="margin-left:8px">排序：</span>
+    <select class="filter-select" onchange="setSortAndDir(this.value)">
+      <option value="name-asc" ${currentSort==='name'&&currentSortDir==='asc'?'selected':''}>名称 ↑</option>
+      <option value="name-desc" ${currentSort==='name'&&currentSortDir==='desc'?'selected':''}>名称 ↓</option>
+      <option value="date-asc" ${currentSort==='date'&&currentSortDir==='asc'?'selected':''}>日期 ↑</option>
+      <option value="date-desc" ${currentSort==='date'&&currentSortDir==='desc'?'selected':''}>日期 ↓</option>
+      <option value="size-asc" ${currentSort==='size'&&currentSortDir==='asc'?'selected':''}>大小 ↑</option>
+      <option value="size-desc" ${currentSort==='size'&&currentSortDir==='desc'?'selected':''}>大小 ↓</option>
+    </select>
+    <span style="font-size:11px;color:var(--text2);margin-left:4px">${count !== total ? `(${count}/${total})` : `(${count} 项)`}</span>
+  </div>`;
+}
+
+function renderMediaGrid(items) {
+  let html = `<div class="photos-grid" id="photos-grid">`;
+  html += renderMediaGridItems(items, 0);
+  html += `</div>`;
+  return html;
+}
+
+function renderMediaGridItems(items, startIdx) {
+  let html = "";
+  items.forEach((item, i) => {
+    const idx = startIdx + i;
+    const root = item.library_root || "";
+    const fav = item.meta_favorite;
+    const rating = item.meta_rating;
+    const tags = item.meta_tags;
+    let badges = "";
+    if (fav) badges += `<div class="photo-badge-fav show">❤</div>`;
+    if (rating > 0) badges += `<div class="photo-badge-rating show">${'★'.repeat(rating)}</div>`;
+    if (tags && tags.length) badges += `<div class="photo-badge-tags show" title="${tags.join(', ')}">🏷</div>`;
+    if (item.type === "video") {
+      html += `<div class="photo-item${selectedItems.has(idx)?' selected':''}" onclick="onPhotoItemClick(event,${idx})" title="${escapeAttr(item.name)}">
+        <div class="select-check"></div>
+        <img data-src="${vthumbUrl(item.path, root)}" src="" alt="" />
+        <div class="video-overlay"><div class="video-play-icon">▶</div></div>
+        <div class="media-badge">🎬</div>
+        <div class="photo-name">${escapeHtml(item.name)}</div>
+        ${badges}
+      </div>`;
+    } else {
+      html += `<div class="photo-item${selectedItems.has(idx)?' selected':''}" onclick="onPhotoItemClick(event,${idx})" title="${escapeAttr(item.name)}">
+        <div class="select-check"></div>
+        <img data-src="${thumbUrl(item.path, root)}" src="" alt="${escapeAttr(item.name)}" />
+        <div class="photo-name">${escapeHtml(item.name)}</div>
+        ${badges}
+      </div>`;
+    }
+  });
+  return html;
+}
+
+function onPhotoItemClick(event, idx) {
+  if (batchMode) {
+    event.stopPropagation();
+    toggleSelectItem(idx);
+    return;
+  }
+  openLightbox(idx);
+}
+
+function applyFilterAndSort(images) {
+  let result = [...images];
+  if (currentFilter === "image") result = result.filter(i => i.type === "image");
+  else if (currentFilter === "video") result = result.filter(i => i.type === "video");
+  result.sort((a, b) => {
+    let cmp = 0;
+    if (currentSort === "name") cmp = a.name.localeCompare(b.name, "zh-CN");
+    else if (currentSort === "date") cmp = (a.mtime || 0) - (b.mtime || 0);
+    else if (currentSort === "size") cmp = (a.size || 0) - (b.size || 0);
+    return currentSortDir === "asc" ? cmp : -cmp;
+  });
+  return result;
+}
+
+function setFilter(val) {
+  currentFilter = val;
+  document.getElementById("global-filter").value = val;
+  exitBatchMode();
+  if (activeTagFilters.length > 0) {
+    loadTagSearch();
+  } else if (val === "all") {
+    stopInfiniteScroll();
+    if (rawPageData) renderPageContent(rawPageData);
+  } else {
+    loadGlobalSearch();
+  }
+}
+
+function setSortAndDir(val) {
+  const [sort, dir] = val.split("-");
+  currentSort = sort;
+  currentSortDir = dir;
+  // 同步全局下拉框
+  document.getElementById("global-sort").value = val;
+  if (currentFilter !== "all") {
+    // 全局筛选模式下，重新搜索
+    loadGlobalSearch();
+  } else if (rawPageData) {
+    renderPageContent(rawPageData);
+  }
+}
+
+async function loadGlobalSearch() {
+  infiniteScroll = true;
+  scrollOffset = 0;
+  scrollHasMore = false;
+  const main = document.getElementById("main");
+  main.innerHTML = `<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>`;
+  try {
+    let apiUrl = "/api/search";
+    let params;
+    if (currentFilter === "favorite") {
+      apiUrl = "/api/favorites";
+      params = new URLSearchParams({ filter_type: "all", sort: currentSort, sort_dir: currentSortDir, offset: 0, limit: 200 });
+    } else {
+      params = new URLSearchParams({ filter_type: currentFilter, sort: currentSort, sort_dir: currentSortDir, offset: 0, limit: 200 });
+    }
+    const res = await fetch(`${apiUrl}?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    scrollTotalCount = data.total;
+    scrollHasMore = data.has_more;
+    scrollOffset = data.images.length;
+    currentMedia = data.images.map(item => ({ path: item.path, type: item.type, name: item.name, library_root: item.library_root || "", meta_favorite: item.meta_favorite, meta_rating: item.meta_rating, meta_tags: item.meta_tags }));
+    currentPath = "";
+    renderInfiniteScrollResult(data);
+  } catch(e) {
+    main.innerHTML = `<div class="error-banner">⚠️ 加载失败：${e.message}</div>`;
+  }
+}
+
+function renderInfiniteScrollResult(data) {
+  const images = data.images;
+  const total = data.total;
+  const totalImg = data.total_images || 0;
+  const totalVid = data.total_videos || 0;
+  const parts = [];
+  const filterLabel = currentFilter === "image" ? "图片" : currentFilter === "video" ? "视频" : currentFilter === "favorite" ? "收藏" : "全部";
+  if (totalImg > 0) parts.push(`🖼️ ${totalImg} 张`);
+  if (totalVid > 0) parts.push(`🎬 ${totalVid} 个`);
+  let html = "";
+  if (parts.length) html += `<div class="stats"><span>🔍 ${filterLabel}筛选</span><span>${parts.join(" · ")}</span><span>${total} 项</span></div>`;
+  if (images.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">🔍</div><h3>没有找到匹配的内容</h3></div>`;
+    document.getElementById("main").innerHTML = html;
+    return;
+  }
+  html += renderMediaGrid(images);
+  if (scrollHasMore) {
+    html += `<div class="load-more-sentinel" id="load-more-sentinel"></div>`;
+    html += `<div class="load-more-indicator" id="load-more-indicator" style="display:none">加载更多...</div>`;
+  } else {
+    html += `<div class="load-more-indicator">已加载全部 ${total} 项</div>`;
+  }
+  document.getElementById("main").innerHTML = html;
+  requestAnimationFrame(() => {
+    document.querySelectorAll("img[data-src]").forEach(observeLazy);
+    if (scrollHasMore) setupScrollObserver();
+  });
+}
+
+async function loadMoreScroll() {
+  if (scrollLoading || !scrollHasMore || !infiniteScroll) return;
+  scrollLoading = true;
+  const indicator = document.getElementById("load-more-indicator");
+  if (indicator) indicator.style.display = "";
+  try {
+    let apiUrl = currentFilter === "favorite" ? "/api/favorites" : "/api/search";
+    const params = new URLSearchParams({
+      filter_type: currentFilter === "favorite" ? "all" : currentFilter,
+      sort: currentSort, sort_dir: currentSortDir, offset: scrollOffset, limit: 200,
+    });
+    const res = await fetch(`${apiUrl}?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const newItems = data.images.map(item => ({ path: item.path, type: item.type, name: item.name, library_root: item.library_root || "", meta_favorite: item.meta_favorite, meta_rating: item.meta_rating, meta_tags: item.meta_tags }));
+    currentMedia = currentMedia.concat(newItems);
+    scrollHasMore = data.has_more;
+    scrollOffset += data.images.length;
+    const grid = document.getElementById("photos-grid");
+    if (grid) {
+      const startIdx = currentMedia.length - newItems.length;
+      grid.insertAdjacentHTML("beforeend", renderMediaGridItems(newItems, startIdx));
+      const sentinel = document.getElementById("load-more-sentinel");
+      const loadInd = document.getElementById("load-more-indicator");
+      if (sentinel && !scrollHasMore) { sentinel.remove(); if (loadInd) { loadInd.style.display=""; loadInd.textContent=`已加载全部 ${scrollTotalCount} 项`; } }
+      requestAnimationFrame(() => { document.querySelectorAll("img[data-src]").forEach(observeLazy); });
+    }
+  } catch(e) { console.error("加载更多失败:", e); }
+  scrollLoading = false;
+  if (indicator) indicator.style.display = "none";
+}
+
+function setupScrollObserver() {
+  if (scrollObserver) scrollObserver.disconnect();
+  const sentinel = document.getElementById("load-more-sentinel");
+  if (!sentinel) return;
+  scrollObserver = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) loadMoreScroll(); }, { rootMargin: "500px" });
+  scrollObserver.observe(sentinel);
+}
+
+function stopInfiniteScroll() {
+  infiniteScroll = false;
+  if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
+}
+
+function renderBreadcrumb(crumbs, cur) {
+  const bc = document.getElementById("breadcrumb");
+  let html = `<span class="breadcrumb-item${cur===''?' active':''}" onclick="navigate('')">全部相册</span>`;
+  crumbs.forEach((c, i) => {
+    html += `<span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-item${i===crumbs.length-1?' active':''}"
+        onclick="navigate('${escapeAttr(c.path)}')">${escapeHtml(c.name)}</span>`;
+  });
+  bc.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════
+// 信息面板
+// ══════════════════════════════════════════════════════════
+let infoPanelOpen = false;
+
+function toggleInfoPanel() {
+  if (infoPanelOpen) closeInfoPanel();
+  else openInfoPanel();
+}
+
+function openInfoPanel() {
+  infoPanelOpen = true;
+  document.getElementById("lb-info-btn").classList.add("active");
+  const panel = document.getElementById("lb-info-panel");
+  panel.style.display = "flex";
+  // 触发 reflow 后添加 open class 以激活动画
+  requestAnimationFrame(() => {
+    panel.classList.add("open");
+  });
+  loadMediaInfo();
+}
+
+function closeInfoPanel() {
+  infoPanelOpen = false;
+  document.getElementById("lb-info-btn").classList.remove("active");
+  const panel = document.getElementById("lb-info-panel");
+  panel.classList.remove("open");
+  // 动画结束后隐藏
+  setTimeout(() => {
+    if (!infoPanelOpen) panel.style.display = "none";
+  }, 280);
+}
+
+async function loadMediaInfo() {
+  const item = currentMedia[lightboxIndex];
+  if (!item) return;
+  const content = document.getElementById("lb-info-content");
+  const editDiv = document.getElementById("lb-info-edit");
+  content.innerHTML = `<div class="lb-info-loading">加载中...</div>`;
+  editDiv.style.display = "none";
+  try {
+    const params = new URLSearchParams({ path: item.path });
+    if (item.library_root) params.set("root", item.library_root);
+    const res = await fetch(`/api/media-info?${params}`);
+    const info = await res.json();
+
+    let html = "";
+    const row = (label, value) => `<div class="lb-info-row"><span class="lb-info-label">${label}</span><span class="lb-info-value">${value}</span></div>`;
+    html += row("文件名", info.name);
+    if (info.meta_title) html += row("标题", info.meta_title);
+    html += row("格式", info.format);
+    html += row("大小", info.size_display);
+    html += row("修改时间", info.modified);
+    if (info.resolution) html += row("分辨率", info.resolution);
+    if (info.duration_display) html += row("时长", info.duration_display);
+    html += row("类型", info.type === "video" ? "视频" : "图片");
+    if (info.meta_tags && info.meta_tags.length) html += row("标签", info.meta_tags.map(t=>`<span style="background:rgba(91,110,247,.15);padding:2px 8px;border-radius:10px;margin:2px;font-size:11px">${escapeHtml(t)}</span>`).join(""));
+    if (info.meta_favorite) html += row("收藏", "⭐ 已收藏");
+    if (info.meta_rating) html += row("评分", "★".repeat(info.meta_rating) + "☆".repeat(5-info.meta_rating));
+    if (info.meta_location) html += row("地点", info.meta_location);
+
+    content.innerHTML = html;
+
+    // 加载编辑面板
+    currentMeta = info;
+    currentMetaRating = info.meta_rating || 0;
+    document.getElementById("meta-title-input").value = info.meta_title || "";
+    document.getElementById("meta-desc-input").value = info.meta_description || "";
+    document.getElementById("meta-tags-input").value = (info.meta_tags && info.meta_tags.length) ? info.meta_tags.join(", ") : "";
+    document.getElementById("meta-location-input").value = info.meta_location || "";
+    const favBtn = document.getElementById("meta-fav-btn");
+    favBtn.textContent = info.meta_favorite ? "♥" : "☆";
+    favBtn.style.color = info.meta_favorite ? "#ef4444" : "";
+    favBtn.style.background = info.meta_favorite ? "rgba(239,68,68,.2)" : "rgba(255,255,255,.08)";
+    updateRatingStars(currentMetaRating);
+    editDiv.style.display = "";
+  } catch(e) {
+    content.innerHTML = `<div class="lb-info-loading">加载失败</div>`;
+  }
+}
+
+function updateRatingStars(rating) {
+  const el = document.getElementById("meta-rating-edit");
+  if (!el) return;
+  el.innerHTML = "★".repeat(rating) + "☆".repeat(5 - rating);
+  el.style.color = "#fbbf24";
+  document.getElementById("meta-rating-val").textContent = rating > 0 ? `${rating} 星` : "";
+}
+
+function editMetaRating() {
+  currentMetaRating = (currentMetaRating % 5) + 1;
+  updateRatingStars(currentMetaRating);
+}
+
+function toggleMetaFavorite() {
+  if (!currentMeta) return;
+  currentMeta.meta_favorite = currentMeta.meta_favorite ? 0 : 1;
+  const favBtn = document.getElementById("meta-fav-btn");
+  favBtn.textContent = currentMeta.meta_favorite ? "♥" : "☆";
+  favBtn.style.color = currentMeta.meta_favorite ? "#ef4444" : "";
+  favBtn.style.background = currentMeta.meta_favorite ? "rgba(239,68,68,.2)" : "rgba(255,255,255,.08)";
+}
+
+async function saveMetadata() {
+  const item = currentMedia[lightboxIndex];
+  if (!item || !item.library_root) { showToast("保存失败：缺少路径信息"); return; }
+  const params = new URLSearchParams({
+    library_root: item.library_root,
+    rel_path: item.path,
+    target_type: "file",
+  });
+  const title = document.getElementById("meta-title-input").value.trim();
+  const desc = document.getElementById("meta-desc-input").value.trim();
+  const tagsStr = document.getElementById("meta-tags-input").value.trim();
+  const location = document.getElementById("meta-location-input").value.trim();
+  if (title) params.set("title", title);
+  if (desc) params.set("description", desc);
+  if (tagsStr) params.set("tags", JSON.stringify(tagsStr.split(/[,，]/).map(t=>t.trim()).filter(Boolean)));
+  else params.set("tags", "[]");
+  params.set("favorite", currentMeta.meta_favorite);
+  params.set("rating", currentMetaRating);
+  if (location) params.set("location", location);
+
+  try {
+    const res = await fetch(`/api/metadata/set?${params}`, { method: "POST" });
+    if (res.ok) {
+      showToast("✅ 属性已保存");
+      // 更新 currentMedia 中的属性
+      item.meta_favorite = currentMeta.meta_favorite;
+      item.meta_rating = currentMetaRating;
+      // 重新加载信息面板
+      loadMediaInfo();
+    } else {
+      showToast("保存失败");
+    }
+  } catch(e) {
+    showToast("保存失败");
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 灯箱
+// ══════════════════════════════════════════════════════════
+function openLightbox(idx) {
+  if (!currentMedia.length) return;
+  lightboxIndex = idx;
+  document.getElementById("lightbox").classList.add("open");
+  document.body.style.overflow = "hidden";
+  buildFilmstrip();
+  showMedia(idx);
+}
+
+/* ── 胶卷条：拖拽调高度 + 折叠切换 ── */
+let filmCollapsed = false;
+function toggleFilmstrip() {
+  const strip = document.getElementById("lb-filmstrip");
+  const btn = document.getElementById("lb-film-toggle");
+  filmCollapsed = !filmCollapsed;
+  if (filmCollapsed) {
+    strip.classList.add("collapsed");
+    btn.textContent = "▴";
+    btn.title = "显示胶卷条";
+  } else {
+    strip.classList.remove("collapsed");
+    btn.textContent = "▾";
+    btn.title = "隐藏胶卷条";
+  }
+}
+// 拖拽调整高度
+(function() {
+  const handle = document.getElementById("lb-film-resize");
+  const strip = document.getElementById("lb-filmstrip");
+  let dragging = false, startY = 0, startH = 0;
+  handle.addEventListener("mousedown", e => {
+    e.preventDefault(); e.stopPropagation();
+    dragging = true; startY = e.clientY;
+    startH = strip.offsetHeight;
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+  handle.addEventListener("touchstart", e => {
+    e.stopPropagation();
+    dragging = true; startY = e.touches[0].clientY;
+    startH = strip.offsetHeight;
+    document.addEventListener("touchmove", onTouchMove, {passive: false});
+    document.addEventListener("touchend", onTouchUp);
+  }, {passive: true});
+  function onMove(e) {
+    if (!dragging) return;
+    const delta = startY - e.clientY;
+    const newH = Math.max(40, Math.min(300, startH + delta));
+    strip.style.height = newH + "px";
+  }
+  function onTouchMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const delta = startY - e.touches[0].clientY;
+    const newH = Math.max(40, Math.min(300, startH + delta));
+    strip.style.height = newH + "px";
+  }
+  function onUp() {
+    dragging = false;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+  }
+  function onTouchUp() {
+    dragging = false;
+    document.removeEventListener("touchmove", onTouchMove);
+    document.removeEventListener("touchend", onTouchUp);
+  }
+})();
+
+function closeLightbox() {
+  const vid = document.getElementById("lb-video");
+  vid.pause(); vid.src = "";
+  closeInfoPanel();
+  document.getElementById("lightbox").classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+function showMedia(idx) {
+  lightboxIndex = idx;
+  const item  = currentMedia[idx];
+  const imgEl = document.getElementById("lb-img");
+  const vidWp = document.getElementById("lb-video-wrap");
+  const vidEl = document.getElementById("lb-video");
+
+  document.getElementById("lb-title").textContent   = item.name || item.path.split(/[/\\]/).pop();
+  document.getElementById("lb-counter").textContent = `${idx + 1} / ${currentMedia.length}`;
+
+  // 如果信息面板打开，更新信息
+  if (infoPanelOpen) loadMediaInfo();
+
+  if (item.type === "video") {
+    imgEl.style.display = "none"; imgEl.src = "";
+    vidWp.style.display = "flex";
+    vidEl.pause();
+    vidEl.src = videoUrl(item.path, item.library_root);
+    vidEl.load();
+    vidEl.play().catch(()=>{});
+    resetVideoUI();
+  } else {
+    vidEl.pause(); vidEl.src = "";
+    vidWp.style.display = "none";
+    imgEl.style.display = "block";
+    imgEl.classList.add("fading");
+    const tmp = new Image();
+    tmp.onload = () => { imgEl.src = tmp.src; imgEl.classList.remove("fading"); };
+    tmp.onerror = () => { imgEl.classList.remove("fading"); };
+    tmp.src = photoUrl(item.path, item.library_root);
+  }
+
+  updateFilmstrip(idx);
+}
+
+function prevMedia() {
+  showMedia((lightboxIndex - 1 + currentMedia.length) % currentMedia.length);
+}
+function nextMedia() {
+  showMedia((lightboxIndex + 1) % currentMedia.length);
+}
+
+// ══════════════════════════════════════════════════════════
+// 胶卷条
+// ══════════════════════════════════════════════════════════
+function buildFilmstrip() {
+  const strip = document.getElementById("lb-filmstrip");
+  // 保留控制元素（resize handle + toggle button）
+  const resize = document.getElementById("lb-film-resize");
+  const toggle = document.getElementById("lb-film-toggle");
+  strip.innerHTML = "";
+  strip.appendChild(resize);
+  strip.appendChild(toggle);
+  currentMedia.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = "lb-film-item";
+    div.dataset.idx = idx;
+    div.onclick = () => showMedia(idx);
+
+    if (item.type === "video") {
+      div.innerHTML = `
+        <img src="${vthumbUrl(item.path, item.library_root)}" alt="" />
+        <div class="film-video-icon">▶</div>`;
+    } else {
+      div.innerHTML = `<img src="${thumbUrl(item.path, item.library_root)}" alt="" loading="lazy" />`;
+    }
+
+    strip.appendChild(div);
+  });
+  initFilmstripDrag();
+}
+
+function updateFilmstrip(idx) {
+  const strip = document.getElementById("lb-filmstrip");
+  strip.querySelectorAll(".lb-film-item").forEach((el, i) => {
+    el.classList.toggle("active", i === idx);
+  });
+  // 滚动居中
+  const active = strip.querySelector(".lb-film-item.active");
+  if (active) {
+    const sw  = strip.clientWidth;
+    const aw  = active.offsetWidth;
+    const al  = active.offsetLeft;
+    strip.scrollLeft = al - sw / 2 + aw / 2;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 胶卷条拖拽滚动
+// ══════════════════════════════════════════════════════════
+let filmDrag = { active: false, startX: 0, scrollStart: 0 };
+function initFilmstripDrag() {
+  const strip = document.getElementById("lb-filmstrip");
+  strip.addEventListener("mousedown", e => {
+    filmDrag.active = true;
+    filmDrag.startX = e.pageX - strip.offsetLeft;
+    filmDrag.scrollStart = strip.scrollLeft;
+    strip.classList.add("dragging");
+  });
+  document.addEventListener("mousemove", e => {
+    if (!filmDrag.active) return;
+    e.preventDefault();
+    const strip = document.getElementById("lb-filmstrip");
+    const x = e.pageX - strip.offsetLeft;
+    strip.scrollLeft = filmDrag.scrollStart - (x - filmDrag.startX);
+  });
+  document.addEventListener("mouseup", () => {
+    filmDrag.active = false;
+    document.getElementById("lb-filmstrip")?.classList.remove("dragging");
+  });
+  // 鼠标滚轮控制缩略图条水平滚动
+  strip.addEventListener("wheel", e => {
+    e.preventDefault();
+    strip.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
+  }, { passive: false });
+}
+
+// ══════════════════════════════════════════════════════════
+// 右键菜单（设置封面）
+// ══════════════════════════════════════════════════════════
+function showContextMenu(e) {
+  e.preventDefault();
+  const menu = document.getElementById("lb-ctx-menu");
+  const item = currentMedia[lightboxIndex];
+  if (!item) return;
+  // 灯箱内右键：显示"设为当前相册封面"（直接设置），隐藏"选择相册封面"（打开选择器）
+  const canSet = currentPath !== "";
+  document.getElementById("ctx-set-cover").style.display = "none";
+  document.getElementById("ctx-set-cover-direct").style.display = canSet ? "" : "none";
+  document.getElementById("ctx-reset-cover").style.display = canSet ? "" : "none";
+  document.getElementById("ctx-edit-tags").style.display = "";
+  // 保存标签编辑目标
+  editTagTarget = { type: "file", path: item.path, root: item.library_root };
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + "px";
+  menu.style.top  = Math.min(e.clientY, window.innerHeight - 150) + "px";
+  menu.classList.add("show");
+}
+
+function hideContextMenu() {
+  document.getElementById("lb-ctx-menu").classList.remove("show");
+}
+
+function ctxClose() { hideContextMenu(); }
+
+// 相册卡片右键菜单
+function showAlbumContextMenu(e, albumPath, root) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideContextMenu();
+  const menu = document.getElementById("lb-ctx-menu");
+  coverPickerAlbum = albumPath;
+  coverPickerRoot = root;
+  // 相册卡片右键：显示"选择相册封面"（打开选择器），隐藏"设为当前相册封面"（直接设置）
+  document.getElementById("ctx-set-cover").style.display = "";
+  document.getElementById("ctx-set-cover-direct").style.display = "none";
+  document.getElementById("ctx-reset-cover").style.display = "";
+  document.getElementById("ctx-edit-tags").style.display = "";
+  // 保存标签编辑目标
+  editTagTarget = { type: "directory", path: albumPath, root: root };
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + "px";
+  menu.style.top  = Math.min(e.clientY, window.innerHeight - 150) + "px";
+  menu.classList.add("show");
+}
+
+// ══════════════════════════════════════════════════════════
+// 编辑标签弹窗（文件/目录级）
+// ══════════════════════════════════════════════════════════
+let editTagTarget = { type: "", path: "", root: "" };
+let editTagCurrentTags = [];
+
+function ctxEditTags() {
+  hideContextMenu();
+  openEditTagDialog(editTagTarget);
+}
+
+async function openEditTagDialog(target) {
+  editTagTarget = target;
+  // 加载当前标签
+  try {
+    const params = new URLSearchParams({
+      library_root: target.root,
+      rel_path: target.path,
+      target_type: target.type,
+    });
+    const res = await fetch(`/api/metadata/get?${params}`);
+    const meta = await res.json();
+    editTagCurrentTags = meta.tags || [];
+  } catch(e) {
+    editTagCurrentTags = [];
+  }
+  // 显示目标信息
+  const info = document.getElementById("edit-tag-target-info");
+  info.textContent = target.type === "directory" ? `📁 相册：${target.path || '根目录'}` : `📄 ${target.path}`;
+  // 显示当前标签
+  renderEditTagCurrent();
+  // 加载已有标签建议
+  try {
+    const res = await fetch("/api/all-tags");
+    const data = await res.json();
+    const cont = document.getElementById("edit-tag-suggestions");
+    cont.innerHTML = (data.tags || []).filter(t => !editTagCurrentTags.includes(t)).slice(0, 20).map(t =>
+      `<span class="filter-tag" onclick="addEditTag('${escapeAttr(t)}')" style="font-size:11px">+ ${escapeHtml(t)}</span>`
+    ).join("");
+  } catch(e) {}
+  document.getElementById("edit-tag-input").value = "";
+  document.getElementById("edit-tag-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("edit-tag-input").focus(), 100);
+}
+
+function renderEditTagCurrent() {
+  const cont = document.getElementById("edit-tag-current");
+  if (!editTagCurrentTags.length) {
+    cont.innerHTML = `<span style="font-size:12px;color:var(--text2)">暂无标签</span>`;
+  } else {
+    cont.innerHTML = editTagCurrentTags.map(t =>
+      `<span class="filter-tag active" style="font-size:11px;gap:4px">${escapeHtml(t)} <span onclick="removeEditTag('${escapeAttr(t)}')" style="cursor:pointer;opacity:.7">✕</span></span>`
+    ).join("");
+  }
+}
+
+function addEditTag(tag) {
+  if (!editTagCurrentTags.includes(tag)) {
+    editTagCurrentTags.push(tag);
+    renderEditTagCurrent();
+    // 刷新建议
+    const cont = document.getElementById("edit-tag-suggestions");
+    cont.querySelectorAll(".filter-tag").forEach(el => {
+      if (el.textContent.trim().replace("+ ","") === tag) el.remove();
+    });
+  }
+}
+
+function removeEditTag(tag) {
+  editTagCurrentTags = editTagCurrentTags.filter(t => t !== tag);
+  renderEditTagCurrent();
+}
+
+function closeEditTag() {
+  document.getElementById("edit-tag-overlay").classList.remove("open");
+}
+
+async function editTagConfirm() {
+  const input = document.getElementById("edit-tag-input").value.trim();
+  // 合并输入框中的新标签
+  if (input) {
+    const newTags = input.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+    newTags.forEach(t => { if (!editTagCurrentTags.includes(t)) editTagCurrentTags.push(t); });
+  }
+  const target = editTagTarget;
+  if (!target.root) { showToast("保存失败：缺少路径信息"); return; }
+  try {
+    const params = new URLSearchParams({
+      library_root: target.root,
+      rel_path: target.path,
+      target_type: target.type,
+      tags: JSON.stringify(editTagCurrentTags),
+    });
+    const res = await fetch(`/api/metadata/set?${params}`, { method: "POST" });
+    if (res.ok) {
+      showToast(`✅ 标签已保存（${editTagCurrentTags.length} 个）`);
+      closeEditTag();
+      // 刷新标签云
+      if (tagCloudOpen) loadTagCloud();
+      // 刷新当前视图
+      if (activeTagFilters.length > 0) {
+        loadTagSearch();
+      } else if (infiniteScroll || currentFilter !== "all") {
+        loadGlobalSearch();
+      } else if (rawPageData) {
+        navigate(currentPath);
+      }
+    } else {
+      showToast("保存失败");
+    }
+  } catch(e) {
+    showToast("保存失败：" + e.message);
+  }
+}
+
+// 设为封面 → 打开封面选择器
+function ctxSetCover() {
+  hideContextMenu();
+  openCoverPicker(coverPickerAlbum, coverPickerRoot);
+}
+
+// 灯箱内直接设为封面（不打开选择器）
+async function ctxSetCoverDirect() {
+  hideContextMenu();
+  const item = currentMedia[lightboxIndex];
+  if (!item || !currentPath) return;
+  try {
+    const params = new URLSearchParams({
+      album_path: currentPath,
+      image_path: item.path,
+    });
+    if (item.library_root) params.set("root", item.library_root);
+    const res = await fetch(`/api/set-cover?${params}`, { method: "POST" });
+    if (res.ok) {
+      showToast("✅ 已设为「" + currentPath.split(/[/\\]/).pop() + "」的封面");
+    } else {
+      showToast("设置封面失败");
+    }
+  } catch(e) {
+    showToast("设置封面失败");
+  }
+}
+
+async function ctxResetCover() {
+  hideContextMenu();
+  const albumPath = coverPickerAlbum || currentPath;
+  try {
+    const res = await fetch(`/api/reset-cover?album_path=${encodeURIComponent(albumPath)}`, { method: "POST" });
+    if (res.ok) {
+      showToast("已恢复默认封面");
+      navigate(currentPath);
+    }
+  } catch(e) {
+    showToast("恢复封面失败");
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 封面选择器
+// ══════════════════════════════════════════════════════════
+async function openCoverPicker(albumPath, root) {
+  coverPickerAlbum = albumPath;
+  coverPickerRoot = root || "";
+  document.getElementById("cover-picker-overlay").classList.add("open");
+  const grid = document.getElementById("cover-picker-grid");
+  grid.innerHTML = `<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>`;
+  try {
+    const res = await fetch(`/api/cover-images?album_path=${encodeURIComponent(albumPath)}`);
+    const data = await res.json();
+    if (data.images.length === 0) {
+      grid.innerHTML = `<div class="cover-picker-empty">该相册中没有图片</div>`;
+      return;
+    }
+    let html = "";
+    data.images.forEach(img => {
+      const imgRoot = img.library_root || "";
+      html += `<div class="cover-pick-item" onclick="pickCover('${escapeAttr(img.path)}','${escapeAttr(imgRoot)}')">
+        <img src="${thumbUrl(img.path, imgRoot)}" alt="${escapeAttr(img.name)}" loading="lazy" />
+        <div class="pick-path" title="${escapeAttr(img.rel_path)}">${escapeHtml(img.rel_path)}</div>
+      </div>`;
+    });
+    grid.innerHTML = html;
+  } catch(e) {
+    grid.innerHTML = `<div class="cover-picker-empty">加载图片失败</div>`;
+  }
+}
+
+function closeCoverPicker() {
+  document.getElementById("cover-picker-overlay").classList.remove("open");
+}
+
+async function pickCover(imagePath, root) {
+  try {
+    const params = new URLSearchParams({
+      album_path: coverPickerAlbum,
+      image_path: imagePath,
+    });
+    if (root) params.set("root", root);
+    const res = await fetch(`/api/set-cover?${params}`, { method: "POST" });
+    if (res.ok) {
+      showToast("已设置为相册封面");
+      closeCoverPicker();
+      navigate(currentPath);
+    } else {
+      showToast("设置封面失败");
+    }
+  } catch(e) {
+    showToast("设置封面失败");
+  }
+}
+
+// 点击弹窗外关闭
+document.getElementById("cover-picker-overlay").addEventListener("click", e => {
+  if (e.target.id === "cover-picker-overlay") closeCoverPicker();
+});
+
+// Toast 提示
+function showToast(msg) {
+  let toast = document.getElementById("toast-msg");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast-msg";
+    toast.style.cssText = "position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(26,29,46,.88);color:#fff;padding:10px 22px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;backdrop-filter:blur(8px);";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = "1";
+  toast.style.transform = "translateX(-50%) translateY(0)";
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(-50%) translateY(20px)";
+  }, 2000);
+}
+
+// 注册右键事件到灯箱舞台
+document.getElementById("lb-stage").addEventListener("contextmenu", showContextMenu);
+document.addEventListener("click", e => {
+  const menu = document.getElementById("lb-ctx-menu");
+  if (!menu.contains(e.target)) hideContextMenu();
+});
+
+// ══════════════════════════════════════════════════════════
+// 自定义视频控制
+// ══════════════════════════════════════════════════════════
+function resetVideoUI() {
+  document.getElementById("lb-play-pause").textContent = "▶";
+  document.getElementById("lb-time").textContent = "0:00 / 0:00";
+  document.getElementById("lb-seek-fill").style.width  = "0%";
+  document.getElementById("lb-seek-buf").style.width   = "0%";
+  document.getElementById("lb-seek-thumb").style.left  = "0%";
+}
+
+const vidEl = document.getElementById("lb-video");
+vidEl.addEventListener("play",  () => { document.getElementById("lb-play-pause").textContent = "⏸"; });
+vidEl.addEventListener("pause", () => { document.getElementById("lb-play-pause").textContent = "▶"; });
+vidEl.addEventListener("ended", () => { document.getElementById("lb-play-pause").textContent = "▶"; });
+vidEl.addEventListener("timeupdate", updateVideoProgress);
+vidEl.addEventListener("progress",   updateVideoBuffer);
+vidEl.addEventListener("loadedmetadata", () => {
+  document.getElementById("lb-time").textContent = `0:00 / ${fmtTime(vidEl.duration)}`;
+});
+// 点击视频切换播放/暂停
+vidEl.addEventListener("click", toggleVideoPlay);
+
+function updateVideoProgress() {
+  if (!vidEl.duration) return;
+  const pct = vidEl.currentTime / vidEl.duration * 100;
+  document.getElementById("lb-seek-fill").style.width  = pct + "%";
+  document.getElementById("lb-seek-thumb").style.left  = pct + "%";
+  document.getElementById("lb-time").textContent = `${fmtTime(vidEl.currentTime)} / ${fmtTime(vidEl.duration)}`;
+}
+function updateVideoBuffer() {
+  if (!vidEl.duration || !vidEl.buffered.length) return;
+  const pct = vidEl.buffered.end(vidEl.buffered.length - 1) / vidEl.duration * 100;
+  document.getElementById("lb-seek-buf").style.width = pct + "%";
+}
+function toggleVideoPlay() {
+  vidEl.paused ? vidEl.play() : vidEl.pause();
+}
+function toggleMute() {
+  vidEl.muted = !vidEl.muted;
+  document.getElementById("lb-mute-btn").textContent = vidEl.muted ? "🔇" : "🔊";
+}
+function setVolume(v) {
+  vidEl.volume = parseFloat(v);
+  vidEl.muted  = v == 0;
+  document.getElementById("lb-mute-btn").textContent = v == 0 ? "🔇" : "🔊";
+}
+function setVideoSpeed(v) { vidEl.playbackRate = parseFloat(v); }
+function toggleFullscreen() {
+  const wrap = document.getElementById("lb-video-wrap");
+  if (!document.fullscreenElement) wrap.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+}
+function fmtTime(s) {
+  if (!s || isNaN(s)) return "0:00";
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2,"0")}`;
+}
+
+// 进度条拖动
+(function setupSeek() {
+  const wrap = document.getElementById("lb-seek-wrap");
+  let dragging = false;
+  function seek(e) {
+    if (!vidEl.duration) return;
+    const rect = wrap.getBoundingClientRect();
+    const x    = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    vidEl.currentTime = (x / rect.width) * vidEl.duration;
+    updateVideoProgress();
+  }
+  wrap.addEventListener("mousedown",  e => { dragging = true; seek(e); e.preventDefault(); });
+  document.addEventListener("mousemove", e => { if (dragging) seek(e); });
+  document.addEventListener("mouseup",   () => { dragging = false; });
+  // 触摸
+  wrap.addEventListener("touchstart", e => { dragging = true; seek(e.touches[0]); }, {passive:true});
+  document.addEventListener("touchmove", e => { if (dragging) seek(e.touches[0]); }, {passive:true});
+  document.addEventListener("touchend",  () => { dragging = false; });
+})();
+
+// ══════════════════════════════════════════════════════════
+// 键盘快捷键（区分视频/图片模式）
+// ══════════════════════════════════════════════════════════
+
+// 长按左右箭头倍速播放状态
+const arrowHold = { active: false, key: null, origSpeed: 1, timer: null, seekDone: false };
+const ARROW_HOLD_DELAY = 250; // 长按判定延迟(ms)
+
+function isVideoActive() {
+  return currentMedia[lightboxIndex]?.type === "video" && document.getElementById("lb-video-wrap").style.display !== "none";
+}
+
+function startArrowHold(key) {
+  if (arrowHold.active) return;
+  arrowHold.active = true;
+  arrowHold.key = key;
+  arrowHold.origSpeed = vidEl.playbackRate;
+  arrowHold.seekDone = false;
+  // 长按判定：超过延迟后才进入倍速，同时标记已seek
+  arrowHold.timer = setTimeout(() => {
+    arrowHold.seekDone = true;
+    vidEl.playbackRate = videoKeys.longSpeed;
+    const label = key === "ArrowRight" ? "快进" : "快退";
+    showVideoOSD(`${videoKeys.longSpeed}× ${label}`);
+  }, ARROW_HOLD_DELAY);
+}
+
+function stopArrowHold(key) {
+  if (!arrowHold.active) return;
+  if (arrowHold.timer) { clearTimeout(arrowHold.timer); arrowHold.timer = null; }
+  // 如果长按已触发（倍速），恢复原速
+  if (arrowHold.seekDone && isVideoActive()) {
+    vidEl.playbackRate = arrowHold.origSpeed;
+    showVideoOSD(`${arrowHold.origSpeed}×`);
+  }
+  // 如果长按没触发（短按松开），执行 seek
+  if (!arrowHold.seekDone && isVideoActive()) {
+    const dir = key === "ArrowRight" ? 1 : -1;
+    vidEl.currentTime += dir * videoKeys.seek;
+  }
+  arrowHold.active = false;
+  arrowHold.seekDone = false;
+}
+
+function showVideoOSD(text) {
+  const osd = document.getElementById("lb-video-osd");
+  if (!osd) return;
+  osd.textContent = text;
+  osd.classList.add("show");
+  clearTimeout(osd._t);
+  osd._t = setTimeout(() => osd.classList.remove("show"), 800);
+}
+
+document.addEventListener("keydown", e => {
+  const lb = document.getElementById("lightbox");
+  if (!lb.classList.contains("open")) return;
+  if (e.key === "Escape") { closeLightbox(); return; }
+
+  // I 键：切换信息面板
+  if (e.key === "i" || e.key === "I") { toggleInfoPanel(); return; }
+
+  // 空格：视频播放/暂停
+  if (e.key === " " && isVideoActive()) {
+    e.preventDefault(); toggleVideoPlay(); return;
+  }
+
+  // PageUp / PageDown：切换上一个/下一个（视频和图片通用）
+  if (e.key === "PageDown") { e.preventDefault(); nextMedia(); return; }
+  if (e.key === "PageUp")   { e.preventDefault(); prevMedia(); return; }
+
+  // 左右箭头
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (isVideoActive()) {
+      // 视频模式：启动长按检测，松开时再决定 seek 或倍速
+      startArrowHold(e.key);
+    } else {
+      // 图片模式：切换上一个/下一个
+      if (e.key === "ArrowRight") nextMedia();
+      else prevMedia();
+    }
+  }
+});
+
+document.addEventListener("keyup", e => {
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    if (arrowHold.active) stopArrowHold(e.key);
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// 相册库管理
+// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// 相册库管理
+// ══════════════════════════════════════════════════════════
+async function loadLibraries() {
+  try {
+    const res = await fetch("/api/libraries");
+    const data = await res.json();
+    renderLibraries(data.libraries);
+  } catch(e) {}
+}
+
+function renderLibraries(libs) {
+  const container = document.getElementById("lib-list");
+  if (!container) return;
+  let html = "";
+  libs.forEach(lib => {
+    const isEnabled = lib.enabled;
+    html += `<div class="lib-item ${isEnabled ? 'active' : ''}" onclick="toggleLib('${escapeAttr(lib.path)}')">
+      <div class="lib-checkbox ${isEnabled ? 'checked' : ''}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="lib-name">${escapeHtml(lib.name)}</div>
+        <div class="lib-path" title="${escapeAttr(lib.path)}">${escapeHtml(lib.path)}</div>
+      </div>
+      <button class="lib-del-btn" onclick="event.stopPropagation();removeLib('${escapeAttr(lib.path)}')" title="删除">✕</button>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+async function addLibrary() {
+  const input = document.getElementById("lib-path-input");
+  const btn = document.getElementById("lib-add-btn");
+  const path = input.value.trim();
+  if (!path) return;
+  btn.disabled = true;
+  btn.textContent = "添加中...";
+  try {
+    const name = path.split(/[/\\]/).filter(Boolean).pop() || "新相册";
+    const res = await fetch(`/api/libraries/add?name=${encodeURIComponent(name)}&path=${encodeURIComponent(path)}`, { method: "POST" });
+    if (res.ok) {
+      input.value = "";
+      await loadLibraries();
+      showToast("✅ 相册库已添加，点击 ↻ 刷新按钮生效");
+    } else {
+      const err = await res.json();
+      showToast(err.detail || "添加失败");
+    }
+  } catch(e) {
+    showToast("添加失败");
+  }
+  btn.disabled = false;
+  btn.textContent = "添加";
+}
+
+async function toggleLib(path) {
+  try {
+    const res = await fetch(`/api/libraries/toggle?path=${encodeURIComponent(path)}`, { method: "POST" });
+    if (res.ok) {
+      await loadLibraries();
+      showToast("状态已更改，点击 ↻ 刷新按钮生效");
+    } else {
+      const err = await res.json();
+      showToast(err.detail || "操作失败");
+    }
+  } catch(e) {}
+}
+
+async function removeLib(path) {
+  try {
+    const res = await fetch(`/api/libraries/remove?path=${encodeURIComponent(path)}`, { method: "POST" });
+    if (res.ok) {
+      await loadLibraries();
+      showToast("已删除相册库，点击 ↻ 刷新按钮生效");
+    } else {
+      const err = await res.json();
+      showToast(err.detail || "删除失败");
+    }
+  } catch(e) {}
+}
+
+// 刷新所有内容（目录树 + 当前页面）
+async function refreshAll() {
+  const btn = document.getElementById("refresh-btn");
+  btn.classList.add("spinning");
+  try {
+    // 先通知后端刷新全局变量
+    await fetch("/api/refresh", { method: "POST" });
+    // 再重新加载目录树和内容
+    document.getElementById("tree-root").innerHTML = "";
+    treeLoaded = false;
+    await loadTree();
+    currentPath = "";
+    await navigate("");
+    showToast("✅ 已刷新");
+  } catch(e) {
+    showToast("刷新失败");
+  }
+  setTimeout(() => btn.classList.remove("spinning"), 600);
+}
+
+// ══════════════════════════════════════════════════════════
+// 工具函数
+// ══════════════════════════════════════════════════════════
+function escapeHtml(s)  { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function escapeAttr(s)  { return String(s).replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+
+// 构建带根目录的媒体URL
+function thumbUrl(path, root) {
+  return `/api/thumbnail?path=${encodeURIComponent(path)}${root ? '&root=' + encodeURIComponent(root) : ''}`;
+}
+function photoUrl(path, root) {
+  return `/api/photo?path=${encodeURIComponent(path)}${root ? '&root=' + encodeURIComponent(root) : ''}`;
+}
+function videoUrl(path, root) {
+  return `/api/video?path=${encodeURIComponent(path)}${root ? '&root=' + encodeURIComponent(root) : ''}`;
+}
+function vthumbUrl(path, root) {
+  return `/api/video-thumbnail?path=${encodeURIComponent(path)}${root ? '&root=' + encodeURIComponent(root) : ''}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// 批量操作
+// ══════════════════════════════════════════════════════════
+function toggleBatchMode() {
+  if (batchMode) exitBatchMode();
+  else enterBatchMode();
+}
+
+function enterBatchMode() {
+  batchMode = true;
+  selectedItems.clear();
+  document.body.classList.add("select-mode");
+  document.getElementById("batch-bar").classList.add("show");
+  updateBatchInfo();
+  // 重新渲染当前媒体网格以显示复选框
+  if (infiniteScroll || currentFilter !== "all") {
+    loadGlobalSearch();
+  } else if (rawPageData) {
+    renderPageContent(rawPageData);
+  }
+}
+
+function exitBatchMode() {
+  batchMode = false;
+  selectedItems.clear();
+  selectedAlbums.clear();
+  document.body.classList.remove("select-mode");
+  document.getElementById("batch-bar").classList.remove("show");
+  document.querySelectorAll(".photo-item.selected").forEach(el => el.classList.remove("selected"));
+  document.querySelectorAll(".album-card.selected").forEach(el => el.classList.remove("selected"));
+}
+
+function toggleSelectItem(idx) {
+  if (selectedItems.has(idx)) selectedItems.delete(idx);
+  else selectedItems.add(idx);
+  const grid = document.getElementById("photos-grid");
+  if (grid) {
+    const items = grid.querySelectorAll(".photo-item");
+    if (items[idx]) items[idx].classList.toggle("selected", selectedItems.has(idx));
+  }
+  updateBatchInfo();
+}
+
+function updateBatchInfo() {
+  const total = selectedItems.size + selectedAlbums.size;
+  document.getElementById("batch-info").textContent = `已选 ${total} 项`;
+}
+
+function toggleSelectAlbum(albumPath, event) {
+  event.stopPropagation();
+  if (selectedAlbums.has(albumPath)) selectedAlbums.delete(albumPath);
+  else selectedAlbums.add(albumPath);
+  // 更新卡片样式
+  document.querySelectorAll(".album-card").forEach(card => {
+    const onclick = card.getAttribute("onclick") || "";
+    if (onclick.includes(albumPath)) {
+      card.classList.toggle("selected", selectedAlbums.has(albumPath));
+    }
+  });
+  updateBatchInfo();
+}
+
+function getSelectedMediaItems() {
+  return Array.from(selectedItems).map(idx => currentMedia[idx]).filter(Boolean);
+}
+
+// 获取选中的相册项（用于批量加目录级标签）
+let selectedAlbums = new Set(); // 存储选中的相册 path
+function getSelectedAlbumItems() {
+  if (!rawPageData || !rawPageData.albums) return [];
+  return rawPageData.albums.filter(a => selectedAlbums.has(a.path)).map(a => ({
+    path: a.path,
+    library_root: a.library_root,
+  }));
+}
+
+async function batchFavorite() {
+  const items = getSelectedMediaItems();
+  if (!items.length) return;
+  // 检查当前是否都已收藏
+  const allFav = items.every(i => i.meta_favorite);
+  for (const item of items) {
+    if (!item.library_root) continue;
+    try {
+      await fetch(`/api/metadata/set?library_root=${encodeURIComponent(item.library_root)}&rel_path=${encodeURIComponent(item.path)}&target_type=file&favorite=${allFav?0:1}`, { method: "POST" });
+      item.meta_favorite = allFav ? 0 : 1;
+    } catch(e) {}
+  }
+  showToast(`✅ 已${allFav?"取消":"添加"}收藏 ${items.length} 项`);
+  exitBatchMode();
+  if (infiniteScroll || currentFilter !== "all") loadGlobalSearch();
+  else if (rawPageData) renderPageContent(rawPageData);
+}
+
+let batchRatingValue = 0;
+function batchSetRatingShow() {
+  batchRatingValue = 0;
+  updateBatchRatingStarsUI(0);
+  document.getElementById("batch-rating-overlay").classList.add("open");
+}
+function closeBatchRating() {
+  document.getElementById("batch-rating-overlay").classList.remove("open");
+}
+function updateBatchRatingStarsUI(rating) {
+  const el = document.getElementById("batch-rating-stars");
+  if (el) { el.innerHTML = "★".repeat(rating) + "☆".repeat(5-rating); el.style.color = "#fbbf24"; }
+  document.getElementById("batch-rating-label").textContent = rating > 0 ? `${rating} 星` : "点击星星设置评分";
+}
+document.addEventListener("click", e => {
+  const overlay = document.getElementById("batch-rating-overlay");
+  const stars = document.getElementById("batch-rating-stars");
+  if (overlay.classList.contains("open") && e.target.closest("#batch-rating-stars")) {
+    const spans = stars.querySelectorAll("*");
+    batchRatingValue = [...stars.children].length - [...stars.querySelectorAll("☆")].length + 1;
+    // 简化：用点击位置计算
+    const rect = stars.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const starWidth = rect.width / 5;
+    batchRatingValue = Math.min(5, Math.max(1, Math.round(x / starWidth)));
+    updateBatchRatingStarsUI(batchRatingValue);
+  }
+});
+
+async function batchSetRatingConfirm() {
+  closeBatchRating();
+  const items = getSelectedMediaItems();
+  if (!items.length || batchRatingValue === 0) return;
+  for (const item of items) {
+    if (!item.library_root) continue;
+    try {
+      await fetch(`/api/metadata/set?library_root=${encodeURIComponent(item.library_root)}&rel_path=${encodeURIComponent(item.path)}&target_type=file&rating=${batchRatingValue}`, { method: "POST" });
+      item.meta_rating = batchRatingValue;
+    } catch(e) {}
+  }
+  showToast(`✅ 已设置评分 ${batchRatingValue} 星（${items.length} 项）`);
+  exitBatchMode();
+  if (infiniteScroll || currentFilter !== "all") loadGlobalSearch();
+  else if (rawPageData) renderPageContent(rawPageData);
+}
+
+function batchAddTagShow() {
+  // 加载已有标签作为建议
+  fetch("/api/all-tags").then(r=>r.json()).then(data => {
+    const cont = document.getElementById("batch-tag-suggestions");
+    cont.innerHTML = data.tags.map(t => `<span class="filter-tag" onclick="document.getElementById('batch-tag-input').value+=', ${t}'">${escapeHtml(t)}</span>`).join("");
+  }).catch(()=>{});
+  document.getElementById("batch-tag-input").value = "";
+  document.getElementById("batch-tag-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("batch-tag-input").focus(), 100);
+}
+function closeBatchTag() {
+  document.getElementById("batch-tag-overlay").classList.remove("open");
+}
+
+async function batchAddTagConfirm() {
+  const input = document.getElementById("batch-tag-input").value;
+  const tags = input.split(/[,，]/).map(t=>t.trim()).filter(Boolean);
+  if (!tags.length) { showToast("请输入标签"); return; }
+  closeBatchTag();
+  // 支持文件和目录两种类型
+  const items = getSelectedMediaItems();
+  const dirItems = getSelectedAlbumItems();
+  const allItems = [...items.map(i => ({...i, _type: "file"})), ...dirItems.map(i => ({...i, _type: "directory"}))];
+  if (!allItems.length) return;
+  let count = 0;
+  // 按类型和 library_root 分组
+  const groups = {};
+  for (const item of allItems) {
+    const key = `${item.library_root}|${item._type}`;
+    if (!groups[key]) groups[key] = { library_root: item.library_root, target_type: item._type, paths: [] };
+    groups[key].paths.push(item.path);
+  }
+  for (const g of Object.values(groups)) {
+    try {
+      const res = await fetch("/api/metadata/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ library_root: g.library_root, rel_paths: g.paths, target_type: g.target_type, action: "add_tags", tags }),
+      });
+      if (res.ok) count += g.paths.length;
+    } catch(e) {}
+  }
+  showToast(`✅ 已添加标签（${count} 项）`);
+  exitBatchMode();
+  if (activeTagFilters.length > 0) loadTagSearch();
+  else if (infiniteScroll || currentFilter !== "all") loadGlobalSearch();
+  else if (rawPageData) renderPageContent(rawPageData);
+}
+
+function batchCancelSelection() {
+  exitBatchMode();
+  if (infiniteScroll || currentFilter !== "all") loadGlobalSearch();
+  else if (rawPageData) renderPageContent(rawPageData);
+}
+
+// ══════════════════════════════════════════════════════════
+// 标签云 & 标签筛选
+// ══════════════════════════════════════════════════════════
+function toggleTagCloud() {
+  tagCloudOpen = !tagCloudOpen;
+  const panel = document.getElementById("tag-cloud-panel");
+  if (tagCloudOpen) {
+    panel.classList.add("open");
+    loadTagCloud();
+  } else {
+    panel.classList.remove("open");
+  }
+}
+
+async function loadTagCloud() {
+  try {
+    const res = await fetch("/api/all-tags");
+    const data = await res.json();
+    allTagsCache = data.tags || [];
+    renderTagCloud();
+  } catch(e) {
+    allTagsCache = [];
+    renderTagCloud();
+  }
+}
+
+function renderTagCloud() {
+  const list = document.getElementById("tag-cloud-list");
+  if (!allTagsCache.length) {
+    list.innerHTML = `<div class="tag-cloud-empty">暂无标签<br><span style="font-size:11px;opacity:.6">在灯箱中编辑属性或使用批量操作添加标签</span></div>`;
+  } else {
+    list.innerHTML = allTagsCache.map(tag => {
+      const isActive = activeTagFilters.includes(tag);
+      return `<div class="tag-cloud-item${isActive?' active':''}" onclick="toggleTagFilter('${escapeAttr(tag)}')">${escapeHtml(tag)}</div>`;
+    }).join("");
+  }
+  renderActiveTagFilters();
+}
+
+function renderActiveTagFilters() {
+  const cont = document.getElementById("tag-filter-active");
+  const navCont = document.getElementById("active-tag-filter");
+  if (!activeTagFilters.length) {
+    cont.innerHTML = "";
+    navCont.style.display = "none";
+    return;
+  }
+  cont.innerHTML = activeTagFilters.map(tag =>
+    `<div class="tag-filter-chip" onclick="toggleTagFilter('${escapeAttr(tag)}')">${escapeHtml(tag)} <span class="chip-x">✕</span></div>`
+  ).join("");
+  // 导航栏中也显示
+  navCont.style.display = "";
+  navCont.innerHTML = activeTagFilters.map(tag =>
+    `<span class="filter-tag active" onclick="toggleTagFilter('${escapeAttr(tag)}')" style="font-size:11px">${escapeHtml(tag)} ✕</span>`
+  ).join("");
+}
+
+function toggleTagFilter(tag) {
+  const idx = activeTagFilters.indexOf(tag);
+  if (idx >= 0) {
+    activeTagFilters.splice(idx, 1);
+  } else {
+    activeTagFilters.push(tag);
+  }
+  renderTagCloud();
+  if (activeTagFilters.length > 0) {
+    loadTagSearch();
+  } else {
+    // 清除标签筛选，恢复之前的视图
+    stopInfiniteScroll();
+    if (currentFilter !== "all") {
+      loadGlobalSearch();
+    } else if (rawPageData) {
+      renderPageContent(rawPageData);
+    } else {
+      navigate(currentPath);
+    }
+  }
+}
+
+async function loadTagSearch() {
+  infiniteScroll = true;
+  scrollOffset = 0;
+  scrollHasMore = false;
+  const main = document.getElementById("main");
+  main.innerHTML = `<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>`;
+  try {
+    const tagsParam = activeTagFilters.join(",");
+    const params = new URLSearchParams({
+      tags: tagsParam,
+      filter_type: currentFilter === "favorite" ? "all" : currentFilter,
+      sort: currentSort,
+      sort_dir: currentSortDir,
+      offset: 0,
+      limit: 200,
+      target_type: "all",
+    });
+    const res = await fetch(`/api/tag-search?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    currentMedia = (data.images || []).map(item => ({
+      path: item.path, type: item.type, name: item.name,
+      library_root: item.library_root || "",
+      meta_favorite: item.meta_favorite, meta_rating: item.meta_rating,
+      meta_tags: item.meta_tags,
+    }));
+
+    // 渲染结果：先显示匹配的相册，再显示匹配的文件
+    let html = "";
+    const parts = [];
+    if (data.total_albums > 0) parts.push(`📁 ${data.total_albums} 个相册`);
+    if (data.total_images > 0) parts.push(`🖼️ ${data.total_images} 张照片`);
+    if (data.total_videos > 0) parts.push(`🎬 ${data.total_videos} 个视频`);
+    if (parts.length) html += `<div class="stats">${parts.map(p=>`<span>${p}</span>`).join("")}</div>`;
+
+    html += `<div style="margin-bottom:8px"><span style="font-size:12px;color:var(--accent)">🏷 标签筛选：</span>${activeTagFilters.map(t=>`<span class="filter-tag active" style="font-size:11px">${escapeHtml(t)}</span>`).join(" ")}<span style="font-size:11px;color:var(--text2);margin-left:6px">(${data.total} 项结果)</span></div>`;
+
+    if (data.albums && data.albums.length > 0) {
+      html += renderAlbumsHtml(data.albums);
+    }
+    if (data.images && data.images.length > 0) {
+      if (data.albums && data.albums.length > 0) html += `<div class="section-title" style="margin-top:12px">媒体</div>`;
+      html += `<span style="font-size:11px;color:var(--text2);display:inline-block;margin-bottom:10px">${data.images.length} 项媒体</span>`;
+      html += renderMediaGrid(data.images);
+    }
+    if ((!data.albums || !data.albums.length) && (!data.images || !data.images.length)) {
+      html += `<div class="empty"><div class="empty-icon">🔍</div><h3>没有匹配的结果</h3><p>尝试选择其他标签</p></div>`;
+    }
+
+    main.innerHTML = html;
+    requestAnimationFrame(() => {
+      document.querySelectorAll("img[data-src]").forEach(observeLazy);
+    });
+  } catch(e) {
+    main.innerHTML = `<div class="error-banner">⚠️ 加载失败：${e.message}</div>`;
+  }
+}
+
+// 批量操作弹窗点击外部关闭
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("batch-tag-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "batch-tag-overlay") closeBatchTag();
+  });
+  document.getElementById("batch-rating-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "batch-rating-overlay") closeBatchRating();
+  });
+  document.getElementById("edit-tag-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "edit-tag-overlay") closeEditTag();
+  });
+});
+
+// 键盘 B 键切换批量模式
+document.addEventListener("keydown", e => {
+  if (e.key === "b" || e.key === "B") {
+    const lb = document.getElementById("lightbox");
+    if (lb && lb.classList.contains("open")) return;
+    if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")) return;
+    toggleBatchMode();
+  }
+  if (e.key === "t" || e.key === "T") {
+    const lb = document.getElementById("lightbox");
+    if (lb && lb.classList.contains("open")) return;
+    if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")) return;
+    toggleTagCloud();
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// 启动
+// ══════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>

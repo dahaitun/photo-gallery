@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+.cache
+data/cache/*
+data/*.db
+data/*.json
+.git
+.gitignore
+*.md
+.DS_Store
+.vscode
+.idea
+.workbuddy

@@ -1,0 +1,39 @@
+# 📸 私人相册 — Docker Compose 部署文件
+# 使用方法：
+#   1. 下载此文件
+#   2. 修改下方的 volumes 挂载路径（把你的照片目录挂进去）
+#   3. 运行: docker compose up -d
+#   4. 打开浏览器访问: http://localhost:8080
+
+services:
+  photo-gallery:
+    image: luojiutian007/photo-gallery:latest
+    container_name: photo-gallery
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # 数据持久化（数据库、缓存、配置）—— 不要改这行
+      - ./data:/app/data
+
+      # ═══════════════════════════════════════════════════════
+      # 📁 照片目录挂载 — 在下面添加你的相册目录
+      # 格式: 宿主机路径:容器内路径:ro
+      #   ro 表示只读，防止误删原始照片
+      #
+      # 示例（NAS 上）:
+      #   - /volume1/photos:/photos:ro
+      #   - /volume1/family:/family:ro
+      #   - /volume2/archive:/archive:ro
+      #
+      # 示例（Mac/Windows 上）:
+      #   - /Users/你的用户名/Pictures:/photos:ro
+      #   - D:\Photos:/photos:ro
+      # ═══════════════════════════════════════════════════════
+      - /path/to/your/photos:/photos:ro
+
+    environment:
+      - TZ=Asia/Shanghai
+      # 相册库配置（可选，不设置则自动扫描 /photos 目录）
+      # 格式: JSON 数组，每个元素包含 name 和 path
+      # LIBRARIES: '[{"name":"家庭相册","path":"/photos"},{"name":"旅行","path":"/travel"}]'
