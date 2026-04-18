@@ -165,7 +165,10 @@ def resolve_media_path(path: str, root: str = None) -> Path:
 
 # ── FastAPI 应用 ──────────────────────────────────────────────
 app = FastAPI(title="私人相册", version="2.0.0")
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+# 确保 static 目录存在（Starlette 要求挂载时目录必须存在）
+_static_dir = BASE_DIR / "static"
+_static_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 # 全局变量
 _scanner: Optional[Scanner.LibraryScanner] = None
