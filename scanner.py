@@ -257,6 +257,11 @@ class LibraryScanner:
         if removed > 0:
             logger.info(f"清理了 {removed} 个已删除的文件记录: {library_root}")
 
+        # 清理不存在的目录（修复：切换/删除目录后空文件夹遗留问题）
+        removed_dirs = self.db.remove_missing_dirs(library_root, existing_paths)
+        if removed_dirs > 0:
+            logger.info(f"清理了 {removed_dirs} 个已删除的目录记录: {library_root}")
+
         return file_count, dir_count
 
     def _collect_dir_paths(self, root: Path) -> set:
