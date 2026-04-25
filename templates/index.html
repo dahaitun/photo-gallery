@@ -615,7 +615,10 @@
     .lb-img {
       max-width: 100%; max-height: 100%; object-fit: contain;
       transition: opacity .18s; border-radius: 0; user-select: none;
+      transform-origin: center center;
+      /* 缩放平移时去掉 transition，避免拖拽卡顿 */
     }
+    .lb-img.no-transition { transition: none; }
     .lb-img.fading { opacity: 0; }
 
     /* ── 自定义视频播放器 ── */
@@ -693,6 +696,28 @@
     }
     .lb-spacer { flex: 1; }
     .lb-fullscreen-btn { margin-left: auto; }
+
+    /* ── 灯箱操作工具栏（图片下方、胶卷条上方） ── */
+    .lb-action-bar {
+      display: flex; align-items: center; justify-content: center;
+      padding: 6px 14px; gap: 6px;
+      flex-shrink: 0;
+      background: rgba(0,0,0,.5);
+      opacity: 0; transition: opacity .2s;
+    }
+    .lightbox:hover .lb-action-bar,
+    .lb-action-bar.show { opacity: 1; }
+    .lb-action-btn {
+      background: rgba(255,255,255,.08); border: none;
+      color: rgba(255,255,255,.8); cursor: pointer;
+      padding: 6px 12px; border-radius: 6px; font-size: 13px;
+      display: flex; align-items: center; gap: 5px;
+      transition: background .15s, color .15s; white-space: nowrap;
+    }
+    .lb-action-btn:hover { background: rgba(255,255,255,.18); color: #fff; }
+    .lb-action-btn.icon-only { padding: 6px 8px; font-size: 16px; }
+    .lb-action-sep { width: 1px; height: 18px; background: rgba(255,255,255,.12); }
+    .lb-zoom-label { font-size: 11px; color: rgba(255,255,255,.45); min-width: 36px; text-align: center; }
 
     /* 视频OSD提示 */
     .lb-video-osd {
@@ -1027,6 +1052,8 @@
       .lb-arrow { width: 48px; height: 68px; font-size: 24px; }
       .lb-film-item { max-width: 72px; }
       .lb-filmstrip { height: 80px; }
+      .lb-action-btn span:last-child { display: none; }
+      .lb-action-btn.icon-only { padding: 6px 10px; }
     }
     @media (max-width: 480px) {
       :root { --cols: 2; }
@@ -1182,7 +1209,7 @@
     <button class="lb-arrow left"  onclick="event.stopPropagation();prevMedia()" title="上一个 (←)">‹</button>
 
     <!-- 图片 -->
-    <img class="lb-img" id="lb-img" alt="" style="display:none" onclick="event.stopPropagation()" />
+    <img class="lb-img" id="lb-img" alt="" style="display:none" onclick="event.stopPropagation();lbStageClick()" />
 
     <!-- 视频（含自定义控制条） -->
     <div class="lb-video-wrap" id="lb-video-wrap" style="display:none" onclick="event.stopPropagation()">
@@ -1256,6 +1283,21 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- 操作工具栏 -->
+  <div class="lb-action-bar" id="lb-action-bar" onclick="event.stopPropagation()">
+    <button class="lb-action-btn icon-only" onclick="lbZoomOut()" title="缩小 (−)">−</button>
+    <span class="lb-zoom-label" id="lb-zoom-label">100%</span>
+    <button class="lb-action-btn icon-only" onclick="lbZoomIn()" title="放大 (+)">+</button>
+    <button class="lb-action-btn icon-only" onclick="lbZoomReset()" title="重置缩放 (0)">↺</button>
+    <div class="lb-action-sep"></div>
+    <button class="lb-action-btn" id="lb-set-cover-btn" onclick="lbActionSetCover()" title="设为当前相册封面">
+      <span>🔖</span><span>设为封面</span>
+    </button>
+    <button class="lb-action-btn" id="lb-download-btn" onclick="lbActionDownload()" title="下载原文件">
+      <span>⬇</span><span>下载</span>
+    </button>
   </div>
 
   <!-- 胶卷条 -->
@@ -2269,6 +2311,7 @@ function closeLightbox() {
   const vid = document.getElementById("lb-video");
   vid.pause(); vid.src = "";
   closeInfoPanel();
+  lbZoomReset();
   document.getElementById("lightbox").classList.remove("open");
   document.body.style.overflow = "";
 }
@@ -2282,6 +2325,12 @@ function showMedia(idx) {
 
   document.getElementById("lb-title").textContent   = item.name || item.path.split(/[/\\]/).pop();
   document.getElementById("lb-counter").textContent = `${idx + 1} / ${currentMedia.length}`;
+
+  // 切换时重置缩放
+  lbZoomReset();
+
+  // 更新工具栏按钮状态：仅在子目录内显示"设为封面"按钮
+  document.getElementById("lb-set-cover-btn").style.display = currentPath !== "" ? "" : "none";
 
   // 如果信息面板打开，更新信息
   if (infoPanelOpen) loadMediaInfo();
@@ -2307,6 +2356,198 @@ function showMedia(idx) {
 
   updateFilmstrip(idx);
 }
+
+// ══════════════════════════════════════════════════════════
+// 灯箱缩放 + 拖拽平移
+// ══════════════════════════════════════════════════════════
+let lbZoom = 1;
+let lbPanX = 0, lbPanY = 0;
+let lbDragging = false;
+let lbDragStartX = 0, lbDragStartY = 0;
+let lbDragStartPanX = 0, lbDragStartPanY = 0;
+let lbClickStart = 0;
+let lbHasMoved = false;
+const LB_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const LB_ZOOM_MIN = 0.25;
+const LB_ZOOM_MAX = 4;
+const LB_DOUBLE_CLICK_ZOOM = 2;
+
+function lbApplyTransform() {
+  const imgEl = document.getElementById("lb-img");
+  const vidEl = document.getElementById("lb-video");
+  const t = lbZoom === 1 && lbPanX === 0 && lbPanY === 0
+    ? ""
+    : `translate(${lbPanX}px, ${lbPanY}px) scale(${lbZoom})`;
+  imgEl.style.transform = t;
+  imgEl.style.cursor = lbZoom > 1 ? (lbDragging ? "grabbing" : "grab") : "";
+  vidEl.style.transform = t;
+  vidEl.style.cursor = lbZoom > 1 ? (lbDragging ? "grabbing" : "grab") : "";
+  document.getElementById("lb-zoom-label").textContent = Math.round(lbZoom * 100) + "%";
+}
+
+function lbZoomIn() {
+  if (lbZoom >= LB_ZOOM_MAX) return;
+  lbZoom = LB_ZOOM_STEPS.find(s => s > lbZoom) || Math.min(lbZoom * 1.25, LB_ZOOM_MAX);
+  if (lbZoom === 1) { lbPanX = 0; lbPanY = 0; }
+  lbApplyTransform();
+}
+
+function lbZoomOut() {
+  if (lbZoom <= LB_ZOOM_MIN) return;
+  lbZoom = [...LB_ZOOM_STEPS].reverse().find(s => s < lbZoom) || Math.max(lbZoom / 1.25, LB_ZOOM_MIN);
+  if (lbZoom === 1) { lbPanX = 0; lbPanY = 0; }
+  lbApplyTransform();
+}
+
+function lbZoomReset() {
+  lbZoom = 1;
+  lbPanX = 0;
+  lbPanY = 0;
+  lbApplyTransform();
+}
+
+// 双击缩放：未缩放时放大到 200%，已缩放时重置
+function lbToggleZoom() {
+  if (lbZoom > 1) {
+    lbZoomReset();
+  } else {
+    lbZoom = LB_DOUBLE_CLICK_ZOOM;
+    lbPanX = 0;
+    lbPanY = 0;
+    lbApplyTransform();
+  }
+}
+
+// ── 鼠标/触控拖拽平移 ──
+function lbPanStart(clientX, clientY) {
+  if (lbZoom <= 1) return;
+  lbDragging = true;
+  lbHasMoved = false;
+  lbDragStartX = clientX;
+  lbDragStartY = clientY;
+  lbDragStartPanX = lbPanX;
+  lbDragStartPanY = lbPanY;
+  document.getElementById("lb-img").classList.add("no-transition");
+  document.getElementById("lb-video").classList.add("no-transition");
+}
+
+function lbPanMove(clientX, clientY) {
+  if (!lbDragging) return;
+  const dx = clientX - lbDragStartX;
+  const dy = clientY - lbDragStartY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) lbHasMoved = true;
+  lbPanX = lbDragStartPanX + dx;
+  lbPanY = lbDragStartPanY + dy;
+  lbApplyTransform();
+}
+
+function lbPanEnd() {
+  if (!lbDragging) return;
+  lbDragging = false;
+  document.getElementById("lb-img").classList.remove("no-transition");
+  document.getElementById("lb-video").classList.remove("no-transition");
+}
+
+// ── 事件绑定 ──
+(function() {
+  const stage = document.getElementById("lb-stage");
+  const imgEl = document.getElementById("lb-img");
+  const vidWp = document.getElementById("lb-video-wrap");
+
+  // 鼠标事件
+  stage.addEventListener("mousedown", e => {
+    if (e.target.closest(".lb-arrow") || e.target.closest(".lb-info-panel")) return;
+    lbClickStart = Date.now();
+    if (lbZoom > 1) {
+      e.preventDefault();
+      lbPanStart(e.clientX, e.clientY);
+    }
+  });
+  document.addEventListener("mousemove", e => lbPanMove(e.clientX, e.clientY));
+  document.addEventListener("mouseup", () => lbPanEnd());
+
+  // 触控事件
+  stage.addEventListener("touchstart", e => {
+    if (e.target.closest(".lb-arrow") || e.target.closest(".lb-info-panel")) return;
+    lbClickStart = Date.now();
+    if (lbZoom > 1 && e.touches.length === 1) {
+      lbPanStart(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    if (lbDragging && e.touches.length === 1) {
+      lbPanMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: true });
+  document.addEventListener("touchend", () => lbPanEnd());
+
+  // 双击缩放
+  imgEl.addEventListener("dblclick", e => {
+    e.stopPropagation();
+    lbToggleZoom();
+  });
+  vidWp.addEventListener("dblclick", e => {
+    e.stopPropagation();
+    lbToggleZoom();
+  });
+})();
+
+// 点击图片：拖拽过不算点击；缩放状态下重置缩放；否则关闭灯箱
+function lbStageClick() {
+  if (lbHasMoved) return;
+  if (lbZoom > 1) {
+    lbZoomReset();
+  } else {
+    closeLightbox();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 灯箱操作工具栏功能
+// ══════════════════════════════════════════════════════════
+
+// 设为封面（复用 ctxSetCoverDirect 逻辑）
+async function lbActionSetCover() {
+  const item = currentMedia[lightboxIndex];
+  if (!item || !currentPath) return;
+  try {
+    const params = new URLSearchParams({
+      album_path: currentPath,
+      image_path: item.path,
+    });
+    if (item.library_root) params.set("root", item.library_root);
+    const res = await fetch(`/api/set-cover?${params}`, { method: "POST" });
+    if (res.ok) {
+      showToast("✅ 已设为「" + currentPath.split(/[/\\]/).pop() + "」的封面");
+    } else {
+      showToast("设置封面失败");
+    }
+  } catch(e) {
+    showToast("设置封面失败");
+  }
+}
+
+// 下载原文件
+function lbActionDownload() {
+  const item = currentMedia[lightboxIndex];
+  if (!item) return;
+  const params = new URLSearchParams({ path: item.path });
+  if (item.library_root) params.set("root", item.library_root);
+  const a = document.createElement("a");
+  a.href = `/api/download?${params.toString()}`;
+  a.download = item.name || item.path.split(/[/\\]/).pop();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast("⬇ 开始下载...");
+}
+
+// 灯箱内滚轮缩放
+document.getElementById("lb-stage").addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.deltaY < 0) lbZoomIn();
+  else lbZoomOut();
+}, { passive: false });
 
 function prevMedia() {
   showMedia((lightboxIndex - 1 + currentMedia.length) % currentMedia.length);
@@ -2672,11 +2913,12 @@ function showToast(msg) {
   }, 2000);
 }
 
-// 注册右键事件到灯箱舞台
-document.getElementById("lb-stage").addEventListener("contextmenu", showContextMenu);
+// 注意：灯箱内不再拦截右键，保留系统默认右键菜单
+// 相册卡片右键菜单（编辑标签/选择封面）在 showAlbumContextMenu 中处理
+// 点击页面其他区域关闭相册卡片右键菜单
 document.addEventListener("click", e => {
   const menu = document.getElementById("lb-ctx-menu");
-  if (!menu.contains(e.target)) hideContextMenu();
+  if (!menu.contains(e.target) && !e.target.closest(".album-card")) hideContextMenu();
 });
 
 // ══════════════════════════════════════════════════════════

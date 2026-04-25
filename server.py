@@ -581,6 +581,38 @@ async def get_photo(path: str = Query(...), root: str = Query(default=None)):
     return FileResponse(img_path, media_type=media_type)
 
 
+@app.get("/api/download")
+async def download_file(path: str = Query(...), root: str = Query(default=None)):
+    """下载原始文件（图片/视频），Content-Disposition 附件方式"""
+    file_path, base = resolve_media_path(path, root)
+    if not str(file_path).startswith(str(base.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # 检测 MIME 类型
+    suffix = file_path.suffix.lower()
+    all_mimes = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif",
+        ".webp": "image/webp", ".bmp": "image/bmp",
+        ".tiff": "image/tiff", ".tif": "image/tiff",
+        ".mp4": "video/mp4", ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+        ".webm": "video/webm", ".m4v": "video/mp4",
+        ".flv": "video/x-flv", ".wmv": "video/x-ms-wmv",
+        ".3gp": "video/3gpp", ".ts": "video/mp2t",
+    }
+    media_type = all_mimes.get(suffix, "application/octet-stream")
+    filename = file_path.name
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 @app.get("/api/video")
 async def get_video(path: str = Query(...), request: "Request" = None, root: str = Query(default=None)):
     """流式传输视频，支持 Range 请求"""
