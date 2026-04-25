@@ -613,6 +613,32 @@ def get_dir_preview_images(library_root: str, rel_path: str, limit: int = 4) -> 
         conn.close()
 
 
+def get_dir_recursive_preview_images(library_root: str, rel_path: str, limit: int = 4) -> list:
+    """递归获取目录及其所有子目录中的图片/视频（用于纯子目录相册的 mosaic 封面）"""
+    conn = get_connection()
+    try:
+        if rel_path:
+            pattern = rel_path + "/%"
+            rows = conn.execute("""
+                SELECT * FROM media_files
+                WHERE library_root = ?
+                  AND (dir_path = ? OR dir_path LIKE ?)
+                  AND type IN ('image', 'video')
+                ORDER BY RANDOM()
+                LIMIT ?
+            """, (library_root, rel_path, pattern, limit)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT * FROM media_files
+                WHERE library_root = ? AND type IN ('image', 'video')
+                ORDER BY RANDOM()
+                LIMIT ?
+            """, (library_root, limit)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 # ══════════════════════════════════════════════════════════════
 # 属性管理 CRUD
 # ══════════════════════════════════════════════════════════════

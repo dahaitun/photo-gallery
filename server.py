@@ -245,6 +245,8 @@ async def list_albums(path: str = ""):
                     cover = dir_db['cover_path']
                     cover_type = dir_db.get('cover_type', 'image')
 
+                preview_types = [f['type'] for f in preview_files]
+
                 all_albums.append({
                     "name": root.name,
                     "path": "",
@@ -253,6 +255,7 @@ async def list_albums(path: str = ""):
                     "cover": cover,
                     "cover_type": cover_type,
                     "preview_images": preview_images[:4],
+                    "preview_types": preview_types[:4],
                     "is_dir_only": False,
                     "library_root": library_root,
                     "is_virtual_root": True,
@@ -272,6 +275,16 @@ async def list_albums(path: str = ""):
             preview_files = DB.get_dir_preview_images(library_root, drel, 4)
             preview_images = [f['rel_path'] for f in preview_files]
 
+            # 纯子目录相册（没有直接媒体文件）：递归获取子目录中的图片做 mosaic 封面
+            is_dir_only = img_count == 0 and vid_count == 0
+            if is_dir_only and not preview_images:
+                recursive_previews = DB.get_dir_recursive_preview_images(library_root, drel, 4)
+                preview_images = [f['rel_path'] for f in recursive_previews]
+                # 附带 type 信息用于前端判断是图片还是视频缩略图
+                preview_types = [f['type'] for f in recursive_previews]
+            else:
+                preview_types = [f['type'] for f in preview_files]
+
             # 封面选择：自定义 > 数据库 > 预览图第一张
             cover = None
             cover_type = "image"
@@ -280,8 +293,7 @@ async def list_albums(path: str = ""):
                 cover_type = d.get('cover_type', 'image')
             elif preview_images:
                 cover = preview_images[0]
-                f_info = preview_files[0] if preview_files else None
-                cover_type = f_info['type'] if f_info else "image"
+                cover_type = preview_types[0] if preview_types else "image"
 
             all_albums.append({
                 "name": d['dir_name'],
@@ -291,7 +303,8 @@ async def list_albums(path: str = ""):
                 "cover": cover,
                 "cover_type": cover_type,
                 "preview_images": preview_images[:4],
-                "is_dir_only": img_count == 0 and vid_count == 0,
+                "preview_types": preview_types[:4],
+                "is_dir_only": is_dir_only,
                 "library_root": library_root,
                 "meta_favorite": d.get('meta_favorite', 0),
                 "meta_title": d.get('meta_title'),
