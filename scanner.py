@@ -102,12 +102,85 @@ class LibraryScanner:
                     if lib_path.exists():
                         self._update_recursive_counts(str(lib_path))
 
+            # 预生成缩略图：扫描完成后，对新增/修改的文件在后台批量生成缩略图缓存
+            if not self._stop_event.is_set():
+                self._pregenerate_thumbnails(library_roots)
+
             self.db.mark_scan_complete(total_files, total_dirs)
             logger.info(f"扫描完成: {total_files} 个文件, {total_dirs} 个目录")
 
         except Exception as e:
             logger.error(f"扫描出错: {e}", exc_info=True)
             self.db.update_scan_state(status='idle', progress=0)
+
+    def _pregenerate_thumbnails(self, library_roots):
+        """扫描完成后，批量预生成缩略图缓存（后台阶段，不阻塞数据入库）"""
+        from thumbnail import generate_thumbnail, generate_video_thumbnail, _thumb_cache_path, _video_thumb_cache_path
+
+        logger.info("开始预生成缩略图缓存...")
+        self.db.update_scan_state(progress=0.92)
+        total_generated = 0
+        total_skipped = 0
+
+        for lib in library_roots:
+            if self._stop_event.is_set():
+                break
+
+            if isinstance(lib, dict):
+                root = Path(lib['path']).expanduser().resolve()
+            elif isinstance(lib, str):
+                root = Path(lib).expanduser().resolve()
+            elif isinstance(lib, Path):
+                root = lib.resolve()
+            else:
+                continue
+
+            if not root.exists():
+                continue
+
+            lib_root = str(root)
+            conn = self.db.get_connection()
+            try:
+                # 获取所有新增/修改的文件（通过判断缩略图缓存是否存在）
+                rows = conn.execute(
+                    "SELECT rel_path, type FROM media_files WHERE library_root = ?",
+                    (lib_root,)
+                ).fetchall()
+            finally:
+                conn.close()
+
+            for row in rows:
+                if self._stop_event.is_set():
+                    break
+
+                rel_path = row['rel_path']
+                file_type = row['type']
+                file_path = root / rel_path
+
+                if not file_path.exists():
+                    continue
+
+                try:
+                    if file_type == 'video':
+                        cache = _video_thumb_cache_path(file_path)
+                        if not cache.exists():
+                            generate_video_thumbnail(file_path)
+                            total_generated += 1
+                        else:
+                            total_skipped += 1
+                    else:
+                        cache = _thumb_cache_path(file_path)
+                        if not cache.exists():
+                            generate_thumbnail(file_path)
+                            total_generated += 1
+                        else:
+                            total_skipped += 1
+                except Exception as e:
+                    logger.debug(f"预生成缩略图失败 {rel_path}: {e}")
+
+            self.db.update_scan_state(progress=min(0.92 + 0.08, 0.99))
+
+        logger.info(f"缩略图预生成完成: 新生成 {total_generated}, 已有缓存跳过 {total_skipped}")
 
     def _scan_library(self, library_root: str, base_progress: float) -> tuple:
         """扫描单个相册库"""
