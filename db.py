@@ -624,14 +624,14 @@ def get_dir_recursive_preview_images(library_root: str, rel_path: str, limit: in
                 WHERE library_root = ?
                   AND (dir_path = ? OR dir_path LIKE ?)
                   AND type IN ('image', 'video')
-                ORDER BY RANDOM()
+                ORDER BY dir_path, filename COLLATE NOCASE
                 LIMIT ?
             """, (library_root, rel_path, pattern, limit)).fetchall()
         else:
             rows = conn.execute("""
                 SELECT * FROM media_files
                 WHERE library_root = ? AND type IN ('image', 'video')
-                ORDER BY RANDOM()
+                ORDER BY dir_path, filename COLLATE NOCASE
                 LIMIT ?
             """, (library_root, limit)).fetchall()
         return [dict(r) for r in rows]
