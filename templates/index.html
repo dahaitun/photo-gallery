@@ -1125,8 +1125,8 @@
       <span class="shortcut-label" style="min-width:auto">上一个 / 下一个</span>
     </div>
     <div class="shortcut-hint">
-      <kbd>←</kbd><kbd>→</kbd> 视频 seek &nbsp; <kbd>PageUp</kbd><kbd>PageDown</kbd> 切换媒体<br>
-      长按左右箭头持续以设定倍速播放
+      <kbd>←</kbd><kbd>→</kbd> 视频 seek &nbsp; <kbd>↑</kbd><kbd>↓</kbd> / <kbd>PageUp</kbd><kbd>PageDown</kbd> 切换媒体<br>
+      长按左右箭头持续以设定倍速播放 &nbsp; <kbd>Esc</kbd> 返回上一级相册
     </div>
   </div>
 
@@ -1643,7 +1643,7 @@ function initLazyObserver() {
         lazyObserver.unobserve(el);
       }
     });
-  }, { rootMargin: "200px" });
+  }, { rootMargin: "600px" });  // 扩大预加载范围，提前加载更多图
 }
 
 function observeLazy(el) {
@@ -1672,6 +1672,16 @@ async function navigate(path) {
   }
 }
 
+function navigateBack() {
+  // 已在根目录则不操作
+  if (!currentPath) return;
+  // 取上一级：去掉最后一段路径
+  const parts = currentPath.replace(/\\/g, "/").split("/").filter(Boolean);
+  parts.pop();
+  const parentPath = parts.join("/");
+  navigate(parentPath);
+}
+
 function showLoading() {
   document.getElementById("main").innerHTML = `
     <div class="loading">
@@ -1688,6 +1698,48 @@ function renderPage(data) {
   renderBreadcrumb(data.breadcrumbs, data.current_path);
   rawPageData = data;
   renderPageContent(data);
+  // 渲染完成后，利用浏览器空闲时间批量预加载所有缩略图（加速灯箱首图显示）
+  prefetchThumbnails(data);
+}
+
+// 预加载缩略图：分批在浏览器空闲时创建 Image 对象触发请求，浏览器会自动缓存
+function prefetchThumbnails(data) {
+  const urls = [];
+  // 收集相册封面缩略图
+  (data.albums || []).forEach(a => {
+    if (!a.cover) return;
+    const root = a.library_root || "";
+    urls.push(a.cover_type === "video" ? vthumbUrl(a.cover, root) : thumbUrl(a.cover, root));
+  });
+  // 收集媒体缩略图
+  (data.images || []).forEach(item => {
+    const root = item.library_root || "";
+    urls.push(item.type === "video" ? vthumbUrl(item.path, root) : thumbUrl(item.path, root));
+  });
+  if (!urls.length) return;
+
+  // 分批预加载（每批 10 张，避免瞬间打满请求）
+  const BATCH = 10;
+  let i = 0;
+  function loadBatch(deadline) {
+    while (i < urls.length && (deadline ? deadline.timeRemaining() > 5 : true)) {
+      const img = new Image();
+      img.src = urls[i++];
+      if (i % BATCH === 0) break;
+    }
+    if (i < urls.length) {
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(loadBatch, { timeout: 2000 });
+      } else {
+        setTimeout(() => loadBatch(null), 100);
+      }
+    }
+  }
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(loadBatch, { timeout: 1000 });
+  } else {
+    setTimeout(() => loadBatch(null), 200);
+  }
 }
 
 function renderPageContent(data) {
@@ -2751,8 +2803,15 @@ function showVideoOSD(text) {
 
 document.addEventListener("keydown", e => {
   const lb = document.getElementById("lightbox");
-  if (!lb.classList.contains("open")) return;
-  if (e.key === "Escape") { closeLightbox(); return; }
+  const lbOpen = lb.classList.contains("open");
+
+  // Escape：灯箱开着就关灯箱；灯箱关着就返回上一级相册
+  if (e.key === "Escape") {
+    if (lbOpen) { closeLightbox(); return; }
+    navigateBack(); return;
+  }
+
+  if (!lbOpen) return;
 
   // I 键：切换信息面板
   if (e.key === "i" || e.key === "I") { toggleInfoPanel(); return; }
@@ -2762,9 +2821,9 @@ document.addEventListener("keydown", e => {
     e.preventDefault(); toggleVideoPlay(); return;
   }
 
-  // PageUp / PageDown：切换上一个/下一个（视频和图片通用）
-  if (e.key === "PageDown") { e.preventDefault(); nextMedia(); return; }
-  if (e.key === "PageUp")   { e.preventDefault(); prevMedia(); return; }
+  // 上下箭头 / PageUp / PageDown：切换上一个/下一个（视频和图片通用）
+  if (e.key === "ArrowDown" || e.key === "PageDown") { e.preventDefault(); nextMedia(); return; }
+  if (e.key === "ArrowUp"   || e.key === "PageUp")   { e.preventDefault(); prevMedia(); return; }
 
   // 左右箭头
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
