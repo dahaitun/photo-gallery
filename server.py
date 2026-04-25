@@ -10,6 +10,7 @@ import json
 import asyncio
 import subprocess
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -52,6 +53,12 @@ VIDEO_FORMATS = {"mp4", "mov", "avi", "mkv", "webm", "m4v", "flv", "wmv", "3gp",
 # 确保 data 目录存在
 DATA_DIR.mkdir(exist_ok=True)
 Thumb.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── 后台缩略图预生成线程池（和请求处理线程池隔离，不阻塞灯箱请求） ──
+import concurrent.futures
+_prefetch_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="thumb-prefetch")
+_prefetch_lock = threading.Lock()  # 防止同一相册重复触发
+_prefetching_dirs = set()  # 正在预生成的目录集合
 
 # ── 迁移旧配置文件到 data/ ────────────────────────────────────
 def _migrate_data_files():
@@ -608,6 +615,73 @@ async def get_video_thumbnail(path: str = Query(...), root: str = Query(default=
     loop = asyncio.get_event_loop()
     cache_path = await loop.run_in_executor(None, Thumb.generate_video_thumbnail, vid_path)
     return FileResponse(cache_path, media_type="image/jpeg")
+
+
+def _prefetch_thumbnails_for_dir(lib_root_str: str, dir_path: str):
+    """在后台线程中预生成指定目录下所有缺失的缩略图（低优先级，不阻塞请求）"""
+    root = Path(lib_root_str)
+    if not root.exists():
+        return
+
+    conn = DB.get_connection()
+    try:
+        # 获取当前目录及其子目录的所有媒体文件
+        if dir_path:
+            pattern = dir_path + "/%"
+            rows = conn.execute("""
+                SELECT rel_path, type FROM media_files
+                WHERE library_root = ? AND (dir_path = ? OR dir_path LIKE ?)
+                AND type IN ('image', 'video')
+            """, (lib_root_str, dir_path, pattern)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT rel_path, type FROM media_files
+                WHERE library_root = ? AND type IN ('image', 'video')
+            """, (lib_root_str,)).fetchall()
+    finally:
+        conn.close()
+
+    generated = 0
+    for row in rows:
+        file_path = root / row['rel_path']
+        if not file_path.exists():
+            continue
+        try:
+            if row['type'] == 'video':
+                cache = Thumb._video_thumb_cache_path(file_path)
+                if not cache.exists():
+                    Thumb.generate_video_thumbnail(file_path)
+                    generated += 1
+            else:
+                cache = Thumb._thumb_cache_path(file_path)
+                if not cache.exists():
+                    Thumb.generate_thumbnail(file_path)
+                    generated += 1
+        except Exception:
+            pass
+
+    if generated > 0:
+        logging.getLogger("prefetch").debug(f"预生成 {dir_path or '/'}：{generated} 张缩略图")
+
+    # 完成后从集合中移除
+    with _prefetch_lock:
+        _prefetching_dirs.discard((lib_root_str, dir_path))
+
+
+@app.get("/api/prefetch")
+async def prefetch_thumbnails(path: str = Query(default=""), root: str = Query(default=None)):
+    """打开相册时触发后台缩略图预生成（fire-and-forget，不阻塞请求）"""
+    if not root:
+        return JSONResponse({"ok": True, "prefetching": False})
+
+    dir_key = (root, path)
+    with _prefetch_lock:
+        if dir_key in _prefetching_dirs:
+            return JSONResponse({"ok": True, "prefetching": True, "reason": "already_running"})
+
+    _prefetching_dirs.add(dir_key)
+    _prefetch_executor.submit(_prefetch_thumbnails_for_dir, root, path)
+    return JSONResponse({"ok": True, "prefetching": True})
 
 
 # ══════════════════════════════════════════════════════════════

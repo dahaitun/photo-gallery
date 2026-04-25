@@ -1658,24 +1658,50 @@ function observeLazy(el) {
 }
 
 // ══════════════════════════════════════════════════════════
-// 导航 & 渲染
+// 导航 & 渲染（含页面缓存）
 // ══════════════════════════════════════════════════════════
+const _pageCache = {};  // path -> API 响应数据，用于返回上级时秒加载
+
 async function navigate(path) {
   currentPath = path;
   currentFilter = "all";
   document.getElementById("global-filter").value = "all";
   stopInfiniteScroll();
   exitBatchMode();
-  showLoading();
   syncTreeActive(path);
+
+  // 优先使用缓存（返回上级时秒加载）
+  if (_pageCache[path]) {
+    renderPage(_pageCache[path]);
+    // 触发后台缩略图预生成（fire-and-forget）
+    _triggerPrefetch(path);
+    return;
+  }
+
+  showLoading();
   try {
     const res  = await fetch(`/api/albums?path=${encodeURIComponent(path)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    _pageCache[path] = data;  // 缓存当前页
     renderPage(data);
+    // 触发后台缩略图预生成
+    _triggerPrefetch(path);
   } catch(e) {
     renderError(e.message);
   }
+}
+
+// 触发后端缩略图预生成（fire-and-forget）
+function _triggerPrefetch(path) {
+  // 从当前页面数据中找出属于哪个 library_root
+  if (!rawPageData) return;
+  const images = rawPageData.images || [];
+  if (!images.length) return;
+  const root = images[0].library_root || "";
+  if (!root) return;
+  // 不等待响应，后台默默执行
+  fetch(`/api/prefetch?path=${encodeURIComponent(path)}&root=${encodeURIComponent(root)}`).catch(() => {});
 }
 
 function navigateBack() {
@@ -1704,48 +1730,6 @@ function renderPage(data) {
   renderBreadcrumb(data.breadcrumbs, data.current_path);
   rawPageData = data;
   renderPageContent(data);
-  // 渲染完成后，利用浏览器空闲时间批量预加载所有缩略图（加速灯箱首图显示）
-  prefetchThumbnails(data);
-}
-
-// 预加载缩略图：分批在浏览器空闲时创建 Image 对象触发请求，浏览器会自动缓存
-function prefetchThumbnails(data) {
-  const urls = [];
-  // 收集相册封面缩略图
-  (data.albums || []).forEach(a => {
-    if (!a.cover) return;
-    const root = a.library_root || "";
-    urls.push(a.cover_type === "video" ? vthumbUrl(a.cover, root) : thumbUrl(a.cover, root));
-  });
-  // 收集媒体缩略图
-  (data.images || []).forEach(item => {
-    const root = item.library_root || "";
-    urls.push(item.type === "video" ? vthumbUrl(item.path, root) : thumbUrl(item.path, root));
-  });
-  if (!urls.length) return;
-
-  // 分批预加载（每批 10 张，避免瞬间打满请求）
-  const BATCH = 10;
-  let i = 0;
-  function loadBatch(deadline) {
-    while (i < urls.length && (deadline ? deadline.timeRemaining() > 5 : true)) {
-      const img = new Image();
-      img.src = urls[i++];
-      if (i % BATCH === 0) break;
-    }
-    if (i < urls.length) {
-      if (typeof requestIdleCallback !== "undefined") {
-        requestIdleCallback(loadBatch, { timeout: 2000 });
-      } else {
-        setTimeout(() => loadBatch(null), 100);
-      }
-    }
-  }
-  if (typeof requestIdleCallback !== "undefined") {
-    requestIdleCallback(loadBatch, { timeout: 1000 });
-  } else {
-    setTimeout(() => loadBatch(null), 200);
-  }
 }
 
 function renderPageContent(data) {
